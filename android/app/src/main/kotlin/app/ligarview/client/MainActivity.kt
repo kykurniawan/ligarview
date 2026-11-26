@@ -111,11 +111,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             },
         )
 
-        val cursorView = android.widget.ImageView(this).apply {
-            scaleType = android.widget.ImageView.ScaleType.FIT_XY
-            visibility = View.INVISIBLE
-        }
-        root.addView(cursorView, FrameLayout.LayoutParams(1, 1))
+        val cursorView = CursorView(this)
+        root.addView(cursorView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         cursorOverlay = CursorOverlay(cursorView, root)
 
         stats = TextView(this).apply {
@@ -132,9 +129,22 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
+        val mirror = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(0xFF808080.toInt())
+            visibility = View.GONE
+        }
+        root.addView(
+            mirror,
+            FrameLayout.LayoutParams(dp(110), dp(110), Gravity.TOP or Gravity.START).apply {
+                setMargins(dp(16), dp(70), 0, 0)
+            },
+        )
+        cursorOverlay.mirror = mirror
         // Long-press the picture to toggle the statistics overlay.
         surfaceView.setOnLongClickListener {
             stats.visibility = if (stats.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            mirror.visibility = stats.visibility
             true
         }
 
