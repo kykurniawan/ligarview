@@ -69,11 +69,21 @@ class CursorOverlay(private val view: ImageView, private val root: View) : Chore
         }
 
         val s = shape
+        val show = enabled && inside && s != null
+        if (show != visible) {
+            android.util.Log.d("Ligarview", "cursor visible=$show ${debugState()}")
+        }
         if (enabled && inside && s != null) {
             view.visibility = View.VISIBLE
             visible = true
-            view.translationX = x * rootW - s.hotX * rootW
-            view.translationY = y * rootH - s.hotY * rootH
+            // Keep the whole image on screen. At the right and bottom edges the pointer image
+            // would hang off the display: that is exactly where the cursor arrives when it crosses
+            // over from the Mac's own screen, and where the Dock is revealed. Near an edge the
+            // image is shifted inwards by at most its own size, which beats an invisible cursor.
+            val w = view.layoutParams.width.toFloat()
+            val h = view.layoutParams.height.toFloat()
+            view.translationX = (x * rootW - s.hotX * rootW).coerceIn(0f, maxOf(0f, rootW - w))
+            view.translationY = (y * rootH - s.hotY * rootH).coerceIn(0f, maxOf(0f, rootH - h))
         } else {
             view.visibility = View.INVISIBLE
             visible = false

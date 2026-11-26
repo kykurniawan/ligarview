@@ -11,6 +11,14 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Wall-clock time of day with milliseconds, to correlate with the tablet's logcat.
+fn ts() -> String {
+    let d = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let ms = d.as_millis() % 86_400_000;
+    // Local timezone offset is not needed to compare lines within one session.
+    format!("{:02}:{:02}:{:02}.{:03}", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
+}
+
 #[derive(Default)]
 struct State {
     pos: Option<cursor::Position>,
@@ -47,7 +55,8 @@ pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> 
                 if was_inside != Some(pos.inside) {
                     was_inside = Some(pos.inside);
                     println!(
-                        "cursor: {} the virtual display at ({:.3}, {:.3})",
+                        "{} cursor: {} the virtual display at ({:.3}, {:.3})",
+                        ts(),
                         if pos.inside { "entered" } else { "left" },
                         pos.x,
                         pos.y
@@ -66,7 +75,8 @@ pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> 
                         }
                         shape.filter(|s| s.png != last_png).map(|s| {
                             println!(
-                                "cursor: shape {:.0}x{:.0} pts, hot ({:.0},{:.0}), {} bytes",
+                                "{} cursor: shape {:.0}x{:.0} pts, hot ({:.0},{:.0}), {} bytes",
+                                ts(),
                                 s.width_pts, s.height_pts, s.hot_x_pts, s.hot_y_pts, s.png.len()
                             );
                             last_png = s.png.clone();
