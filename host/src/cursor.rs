@@ -56,6 +56,12 @@ pub fn position(display: u32) -> Position {
     }
 }
 
+/// Global position and size of a display in points: (x, y, width, height).
+pub fn display_bounds(display: u32) -> (f64, f64, f64, f64) {
+    let b = unsafe { CGDisplayBounds(display) };
+    (b.origin.x, b.origin.y, b.size.width, b.size.height)
+}
+
 pub fn shape_seed() -> i32 {
     unsafe { CGSCurrentCursorSeed() }
 }

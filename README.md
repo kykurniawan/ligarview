@@ -80,7 +80,9 @@ Cursor: [`host/src/cursor_server.rs`](host/src/cursor_server.rs).
 
 Latency: VideoToolbox defaults to 11 reference frames, which makes hardware decoders
 buffer 20+ frames before output. The host limits it to 1 (`ReferenceBufferCount`),
-which took decoder latency on a Tab S9 from ~500 ms to ~40 ms.
+which took decoder latency on a Tab S9 from ~500 ms to ~40 ms. On Qualcomm devices the
+client also sets `vendor.qti-ext-dec-picture-order.enable`, which removes the last held-back
+frame (~40 ms -> ~8 ms at 30 fps).
 
 The virtual display uses the private `CGVirtualDisplay` API. It works without
 SIP changes or kernel extensions, but Apple may change it in a macOS update.

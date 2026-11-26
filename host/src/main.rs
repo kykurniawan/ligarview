@@ -112,7 +112,10 @@ fn main() -> Result<()> {
         }
     }
     match selected {
-        Ok(()) => println!("selected mode: {}", VirtualDisplay::describe(vd.id)),
+        Ok(()) => {
+            let (x, y, w, h) = VirtualDisplay::bounds(vd.id);
+            println!("selected mode: {} at ({x:.0},{y:.0}) {w:.0}x{h:.0} pts", VirtualDisplay::describe(vd.id));
+        }
         Err(e) => println!("could not select mode: {e}"),
     }
     for (id, w, h) in VirtualDisplay::active_displays() {

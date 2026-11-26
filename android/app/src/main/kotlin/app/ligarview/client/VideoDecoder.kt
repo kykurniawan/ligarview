@@ -33,6 +33,9 @@ class VideoDecoder(surface: Surface, width: Int, height: Int) {
             setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
             // Qualcomm: output frames as soon as they are decoded instead of buffering for reordering.
             setInteger("vendor.qti-ext-dec-low-latency.enable", 1)
+            // Qualcomm: output in decode order. Without this the decoder holds one frame back
+            // (~one frame interval of latency); the stream has no B-frames so order is identical.
+            setInteger("vendor.qti-ext-dec-picture-order.enable", 1)
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 4 * 1024 * 1024)
         }
         codec.configure(format, surface, null, 0)

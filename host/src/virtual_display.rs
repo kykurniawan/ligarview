@@ -209,6 +209,11 @@ impl VirtualDisplay {
         }
     }
 
+    /// Global position and size of the display in points: (x, y, width, height).
+    pub fn bounds(id: u32) -> (f64, f64, f64, f64) {
+        crate::cursor::display_bounds(id)
+    }
+
     /// Human-readable current mode: points vs real pixels.
     pub fn describe(id: u32) -> String {
         unsafe {
