@@ -1,4 +1,4 @@
-//! H.264 hardware encoder (VideoToolbox) producing Annex-B packets.
+//! H.264 / HEVC hardware encoder (VideoToolbox) producing Annex-B packets.
 
 use anyhow::{anyhow, Result};
 use std::ffi::c_void;
@@ -17,6 +17,23 @@ struct CMTime {
 }
 
 const K_CM_VIDEO_CODEC_H264: u32 = 0x6176_6331; // 'avc1'
+const K_CM_VIDEO_CODEC_HEVC: u32 = 0x6876_6331; // 'hvc1'
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Codec {
+    H264,
+    Hevc,
+}
+
+impl Codec {
+    /// Id used in the protocol hello.
+    pub fn id(self) -> u8 {
+        match self {
+            Codec::H264 => crate::protocol::CODEC_H264,
+            Codec::Hevc => crate::protocol::CODEC_HEVC,
+        }
+    }
+}
 const K_CF_NUMBER_SINT32: isize = 3;
 
 type OutputCallback = extern "C" fn(*mut c_void, *mut c_void, OSStatus, u32, *const c_void);
@@ -48,6 +65,15 @@ extern "C" {
     fn CMSampleBufferGetPresentationTimeStamp(sb: *const c_void) -> CMTime;
     fn CMSampleBufferGetFormatDescription(sb: *const c_void) -> *const c_void;
     fn CMSampleBufferGetDataBuffer(sb: *const c_void) -> *const c_void;
+    fn CMFormatDescriptionGetMediaSubType(desc: *const c_void) -> u32;
+    fn CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+        desc: *const c_void,
+        idx: usize,
+        out: *mut *const u8,
+        size: *mut usize,
+        count: *mut usize,
+        nal_header_len: *mut i32,
+    ) -> OSStatus;
     fn CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
         desc: *const c_void,
         idx: usize,
@@ -75,6 +101,7 @@ extern "C" {
     static kVTCompressionPropertyKey_ExpectedFrameRate: CFTypeRef;
     static kVTCompressionPropertyKey_ReferenceBufferCount: CFTypeRef;
     static kVTProfileLevel_H264_High_AutoLevel: CFTypeRef;
+    static kVTProfileLevel_HEVC_Main_AutoLevel: CFTypeRef;
     static kVTVideoEncoderSpecification_EnableLowLatencyRateControl: CFTypeRef;
     static kVTEncodeFrameOptionKey_ForceKeyFrame: CFTypeRef;
 
@@ -151,7 +178,7 @@ unsafe fn set_i32(session: *mut c_void, key: CFTypeRef, v: i32, what: &str) -> R
 }
 
 impl Encoder {
-    pub fn new(width: u32, height: u32, fps: u32, bitrate_bps: u32, low_latency_rc: bool, tx: Sender<Packet>) -> Result<Self> {
+    pub fn new(width: u32, height: u32, fps: u32, bitrate_bps: u32, low_latency_rc: bool, codec: Codec, tx: Sender<Packet>) -> Result<Self> {
         unsafe {
             let spec_keys = [kVTVideoEncoderSpecification_EnableLowLatencyRateControl];
             let spec_vals = [kCFBooleanTrue];
@@ -170,7 +197,10 @@ impl Encoder {
                 std::ptr::null(),
                 width as i32,
                 height as i32,
-                K_CM_VIDEO_CODEC_H264,
+                match codec {
+                    Codec::H264 => K_CM_VIDEO_CODEC_H264,
+                    Codec::Hevc => K_CM_VIDEO_CODEC_HEVC,
+                },
                 if low_latency_rc { spec } else { std::ptr::null() },
                 std::ptr::null(),
                 std::ptr::null(),
@@ -191,7 +221,14 @@ impl Encoder {
                 "AllowFrameReordering",
             )?;
             check(
-                VTSessionSetProperty(session, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel),
+                VTSessionSetProperty(
+                    session,
+                    kVTCompressionPropertyKey_ProfileLevel,
+                    match codec {
+                        Codec::H264 => kVTProfileLevel_H264_High_AutoLevel,
+                        Codec::Hevc => kVTProfileLevel_HEVC_Main_AutoLevel,
+                    },
+                ),
                 "ProfileLevel",
             )?;
             set_i32(session, kVTCompressionPropertyKey_AverageBitRate, bitrate_bps as i32, "AverageBitRate")?;
@@ -281,14 +318,24 @@ extern "C" fn output_callback(
 
         let mut out = Vec::new();
         if keyframe {
+            // Parameter sets: SPS+PPS for H.264, VPS+SPS+PPS (+SEI) for HEVC.
             let fmt = CMSampleBufferGetFormatDescription(sb);
-            for i in 0..2 {
-                let (mut p, mut size, mut count, mut nal) = (std::ptr::null(), 0usize, 0usize, 0i32);
-                if CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, i, &mut p, &mut size, &mut count, &mut nal) == 0 {
-                    out.extend_from_slice(&[0, 0, 0, 1]);
-                    let nal = std::slice::from_raw_parts(p, size);
-                    out.extend_from_slice(nal);
+            let hevc = CMFormatDescriptionGetMediaSubType(fmt) == K_CM_VIDEO_CODEC_HEVC;
+            let mut i = 0;
+            let mut count = 1usize;
+            while i < count {
+                let (mut p, mut size, mut nal) = (std::ptr::null(), 0usize, 0i32);
+                let st = if hevc {
+                    CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(fmt, i, &mut p, &mut size, &mut count, &mut nal)
+                } else {
+                    CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, i, &mut p, &mut size, &mut count, &mut nal)
+                };
+                if st != 0 {
+                    break;
                 }
+                out.extend_from_slice(&[0, 0, 0, 1]);
+                out.extend_from_slice(std::slice::from_raw_parts(p, size));
+                i += 1;
             }
         }
 

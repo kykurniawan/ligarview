@@ -8,7 +8,7 @@
 //! hardware decoders hold back the newest frame, so without these repeats the
 //! final cursor position would stay invisible until the next screen change.
 
-use crate::encoder::{Encoder, Packet};
+use crate::encoder::{Codec, Encoder, Packet};
 use anyhow::{anyhow, Result};
 use screencapturekit::cm::CMSampleBufferExt;
 use screencapturekit::prelude::*;
@@ -53,6 +53,7 @@ extern "C" {
 pub static FRAMES_CAPTURED: AtomicU64 = AtomicU64::new(0);
 
 pub struct Settings {
+    pub codec: Codec,
     pub low_latency_rc: bool,
     pub show_cursor: bool,
     pub width: u32,
@@ -97,7 +98,7 @@ impl Shared {
             // Size the encoder from the real frame so it matches what SCK delivers.
             let (w, h) = unsafe { (CVPixelBufferGetWidth(pb) as u32, CVPixelBufferGetHeight(pb) as u32) };
             let _ = self.info.send(format!("first frame: {w}x{h}"));
-            match Encoder::new(w, h, self.settings.fps, self.settings.bitrate_bps, self.settings.low_latency_rc, self.tx.clone()) {
+            match Encoder::new(w, h, self.settings.fps, self.settings.bitrate_bps, self.settings.low_latency_rc, self.settings.codec, self.tx.clone()) {
                 Ok(e) => *guard = Some(e),
                 Err(e) => {
                     let _ = self.info.send(format!("encoder init failed: {e}"));

@@ -49,7 +49,7 @@ Early work in progress.
    Defaults to a 1280x800 HiDPI display (2560x1600 real pixels, like a Retina Mac) at 60 fps, 30 Mbps.
    For a 120 Hz panel: `cargo run --release -- --fps 120 --bitrate 60`.
 
-   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --low-latency-rc --cursor-in-video`.
+   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video`.
    `--stats` prints capture/encode rates and latencies once per second.
 
 2. Android: build and install the app (`cd android && ./gradlew installDebug`).
@@ -78,6 +78,10 @@ Video: [`host/src/protocol.rs`](host/src/protocol.rs) (a 12-byte hello, then len
 Cursor: [`host/src/cursor_server.rs`](host/src/cursor_server.rs).
 
 ## Notes
+
+Codec: H.264 by default. `--codec hevc` also works (the app picks the decoder from the hello
+message) but measured the same latency on an M1 Pro / Tab S9 (~41 ms encode, ~8 ms decode);
+its benefit is compression efficiency, not speed.
 
 Encoder: the default VideoToolbox mode sustains ~57 fps on a busy 2560x1600 screen with
 ~40 ms encode latency. `--low-latency-rc` saves ~10 ms per frame but caps throughput near

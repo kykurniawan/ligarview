@@ -1,5 +1,6 @@
 package app.ligarview.client
 
+import android.media.MediaFormat
 import android.view.Surface
 import java.io.BufferedInputStream
 import java.io.DataInputStream
@@ -85,7 +86,11 @@ class StreamClient(
             val version = input.readUnsignedByte()
             if (version != VERSION) throw IOException("Unsupported protocol version $version")
             val codec = input.readUnsignedByte()
-            if (codec != CODEC_H264) throw IOException("Unsupported codec $codec")
+            val mime = when (codec) {
+                CODEC_H264 -> MediaFormat.MIMETYPE_VIDEO_AVC
+                CODEC_HEVC -> MediaFormat.MIMETYPE_VIDEO_HEVC
+                else -> throw IOException("Unsupported codec $codec")
+            }
             val width = input.readUnsignedShort()
             val height = input.readUnsignedShort()
             val fps = input.readUnsignedShort()
@@ -97,9 +102,9 @@ class StreamClient(
                     surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
                 }
             }
-            val decoder = VideoDecoder(surface, width, height).also { this.decoder = it }
+            val decoder = VideoDecoder(surface, width, height, mime).also { this.decoder = it }
             try {
-                onStatus("Connected: ${width}x$height @ $fps fps", false)
+                onStatus("Connected: ${width}x$height @ $fps fps (${if (codec == CODEC_HEVC) "HEVC" else "H.264"})", false)
                 var buffer = ByteArray(512 * 1024)
                 var first = true
                 while (running) {
@@ -126,6 +131,7 @@ class StreamClient(
         val MAGIC = "LGRV".toByteArray()
         const val VERSION = 1
         const val CODEC_H264 = 1
+        const val CODEC_HEVC = 2
         const val FLAG_REPEAT = 2
         const val CONNECT_TIMEOUT_MS = 3000
         const val RETRY_DELAY_MS = 1000L

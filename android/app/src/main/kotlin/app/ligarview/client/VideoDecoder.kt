@@ -6,9 +6,9 @@ import android.view.Surface
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
-/** Hardware H.264 decoder rendering straight to a [Surface], tuned for low latency. */
-class VideoDecoder(surface: Surface, width: Int, height: Int) {
-    private val codec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+/** Hardware H.264/HEVC decoder rendering straight to a [Surface], tuned for low latency. */
+class VideoDecoder(surface: Surface, width: Int, height: Int, mime: String = MediaFormat.MIMETYPE_VIDEO_AVC) {
+    private val codec = MediaCodec.createDecoderByType(mime)
 
     @Volatile
     private var running = true
@@ -27,7 +27,7 @@ class VideoDecoder(surface: Surface, width: Int, height: Int) {
     private val queuedAt = ConcurrentHashMap<Long, Long>()
 
     init {
-        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+        val format = MediaFormat.createVideoFormat(mime, width, height).apply {
             setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
             setInteger(MediaFormat.KEY_PRIORITY, 0) // real-time
             setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())

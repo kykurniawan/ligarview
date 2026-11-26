@@ -7,14 +7,23 @@ mod server;
 mod virtual_display;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use virtual_display::VirtualDisplay;
 
+#[derive(Clone, Copy, ValueEnum)]
+enum CodecArg {
+    H264,
+    Hevc,
+}
+
 #[derive(Parser)]
 struct Args {
+    /// Video codec (HEVC needs Android 5+ hardware decoder support; all modern tablets have it)
+    #[arg(long, value_enum, default_value_t = CodecArg::H264)]
+    codec: CodecArg,
     /// Logical width in points (framebuffer is width x scale pixels)
     #[arg(long, default_value_t = 1280)]
     width: u32,
@@ -131,7 +140,11 @@ fn main() -> Result<()> {
     let key_request = Arc::new(AtomicBool::new(true));
 
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
-    let hello = protocol::Hello { width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
+    let codec = match a.codec {
+        CodecArg::H264 => encoder::Codec::H264,
+        CodecArg::Hevc => encoder::Codec::Hevc,
+    };
+    let hello = protocol::Hello { codec: codec.id(), width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     server::spawn(a.port, hello, rx, key_request.clone(), dump)?;
     if !a.cursor_in_video {
         cursor_server::spawn(a.port + 1, vd.id, (a.width, a.height))?;
@@ -141,14 +154,14 @@ fn main() -> Result<()> {
     let mut capture = None;
     let mut last_err = None;
     for _ in 0..20 {
-        let s = capture::Settings { low_latency_rc: a.low_latency_rc, show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
+        let s = capture::Settings { codec, low_latency_rc: a.low_latency_rc, show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
         match capture::start(vd.id, s, tx.clone(), info_tx.clone(), key_request.clone()) {
             Ok(c) => { capture = Some(c); break; }
             Err(e) => { last_err = Some(e); std::thread::sleep(Duration::from_millis(500)); }
         }
     }
     let Some(_capture) = capture else { return Err(last_err.unwrap()) };
-    println!("capturing {px_w}x{px_h} @ {} fps, {} Mbps", a.fps, a.bitrate);
+    println!("capturing {px_w}x{px_h} @ {} fps, {} Mbps, {codec:?}", a.fps, a.bitrate);
 
     let deadline = Instant::now() + Duration::from_secs(if a.seconds == 0 { u64::MAX / 4 } else { a.seconds });
     if a.wiggle {
