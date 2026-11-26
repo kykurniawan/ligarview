@@ -49,18 +49,30 @@ Early work in progress.
    Defaults to a 1280x800 HiDPI display (2560x1600 real pixels, like a Retina Mac) at 60 fps, 30 Mbps.
    For a 120 Hz panel: `cargo run --release -- --fps 120 --bitrate 60`.
 
-   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video`.
+   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video --no-adb`.
    `--stats` prints capture/encode rates and latencies once per second.
 
 2. Android: build and install the app (`cd android && ./gradlew installDebug`).
 3. Connect:
-   - **USB**: enable USB debugging, run `adb reverse tcp:7878 tcp:7878 && adb reverse tcp:7879 tcp:7879` (video + cursor), open the app and connect to `127.0.0.1:7878`.
+   - **USB**: enable USB debugging, plug the cable in, open the app and connect to `127.0.0.1:7878`. The host sets up (and re-creates) the `adb reverse` tunnels for video and cursor by itself; use `--no-adb` to manage them yourself.
    - **Wi-Fi**: open the app and connect to `<mac-ip>:7878` (same network, 5 GHz recommended). Ports 7878 and 7879 must be reachable.
 
 The app reconnects automatically and remembers the last address. Back returns to the connect screen.
 Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
 
 Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the video, `python3 tools/dump_cursor.py` prints cursor messages.
+
+## Recovery
+
+You should not have to restart anything:
+
+- Unplug and replug the USB cable: the host re-creates the `adb reverse` tunnels and the app reconnects.
+- Silent connection loss (Wi-Fi drop, frozen host): the host sends a heartbeat every second; the app
+  treats 4 s of silence as a dead link and reconnects.
+- Tablet sleep/lock: the app reconnects when it comes back to the foreground.
+- Virtual display or capture lost on the Mac (for example after sleep): the host recreates the
+  display, the HiDPI mode, capture and encoder, then asks for a keyframe. `--debug-drop-display-after N`
+  simulates this.
 
 ## Cursor
 

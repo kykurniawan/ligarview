@@ -35,6 +35,8 @@ extern "C" {
 
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
+    static kCFRunLoopDefaultMode: *const std::ffi::c_void;
+    fn CFRunLoopRunInMode(mode: *const std::ffi::c_void, seconds: f64, return_after_source: u8) -> i32;
     fn CFArrayGetCount(arr: *const std::ffi::c_void) -> isize;
     fn CFArrayGetValueAtIndex(arr: *const std::ffi::c_void, idx: isize) -> *const std::ffi::c_void;
     fn CFRelease(cf: *const std::ffi::c_void);
@@ -53,6 +55,16 @@ extern "C" {
 
 extern "C" {
     fn dispatch_get_global_queue(identifier: isize, flags: usize) -> *mut AnyObject;
+}
+
+static SERIAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// Sleeps while servicing the main run loop. Display configuration changes are delivered
+/// through it, so a plain sleep on the main thread can leave a new display without modes.
+pub fn pump_run_loop(duration: std::time::Duration) {
+    unsafe {
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, duration.as_secs_f64(), 0);
+    }
 }
 
 pub struct VirtualDisplay {
@@ -106,7 +118,10 @@ impl VirtualDisplay {
             let _: () = msg_send![&*desc, setSizeInMillimeters: size];
             let _: () = msg_send![&*desc, setProductID: 0x4C56u32];
             let _: () = msg_send![&*desc, setVendorID: 0x4C47u32];
-            let _: () = msg_send![&*desc, setSerialNum: 1u32];
+            // A fresh serial per instance: with identical IDs macOS can treat a recreated display as
+            // the old one and hand back a display without any modes.
+            let serial = SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let _: () = msg_send![&*desc, setSerialNum: serial];
             let _: () = msg_send![&*desc, setQueue: queue];
 
             let alloc: *mut AnyObject = msg_send![display_cls, alloc];
@@ -212,6 +227,11 @@ impl VirtualDisplay {
     /// Global position and size of the display in points: (x, y, width, height).
     pub fn bounds(id: u32) -> (f64, f64, f64, f64) {
         crate::cursor::display_bounds(id)
+    }
+
+    /// Whether the display is still attached to the system.
+    pub fn is_active(id: u32) -> bool {
+        Self::active_displays().iter().any(|&(d, _, _)| d == id)
     }
 
     /// Human-readable current mode: points vs real pixels.

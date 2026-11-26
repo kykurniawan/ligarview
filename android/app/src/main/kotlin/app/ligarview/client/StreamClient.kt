@@ -61,7 +61,10 @@ class StreamClient(
                 onStatus("Connecting to $host:$port...", false)
                 session()
             } catch (e: Exception) {
-                if (running) onStatus("${e.message ?: e.javaClass.simpleName}. Retrying...", false)
+                if (running) {
+                    val why = if (e is java.net.SocketTimeoutException) "Connection lost" else e.message ?: e.javaClass.simpleName
+                    onStatus("$why. Retrying...", false)
+                }
             }
             if (running) {
                 try {
@@ -78,6 +81,8 @@ class StreamClient(
         sock.use {
             it.tcpNoDelay = true
             it.receiveBufferSize = 1 shl 20
+            // The host sends a heartbeat every second when the screen is still, so silence means a dead link.
+            it.soTimeout = READ_TIMEOUT_MS
             it.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
             val input = DataInputStream(BufferedInputStream(it.getInputStream(), 256 * 1024))
 
@@ -111,6 +116,7 @@ class StreamClient(
                     val length = input.readInt()
                     val flags = input.readUnsignedByte()
                     val ptsUs = input.readLong()
+                    if (flags and FLAG_HEARTBEAT != 0) continue
                     if (length < 0 || length > MAX_FRAME_BYTES) throw IOException("Bad frame size $length")
                     if (buffer.size < length) buffer = ByteArray(length)
                     input.readFully(buffer, 0, length)
@@ -133,6 +139,8 @@ class StreamClient(
         const val CODEC_H264 = 1
         const val CODEC_HEVC = 2
         const val FLAG_REPEAT = 2
+        const val FLAG_HEARTBEAT = 4
+        const val READ_TIMEOUT_MS = 4000
         const val CONNECT_TIMEOUT_MS = 3000
         const val RETRY_DELAY_MS = 1000L
         const val MAX_FRAME_BYTES = 16 * 1024 * 1024

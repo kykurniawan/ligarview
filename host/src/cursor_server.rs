@@ -7,9 +7,9 @@
 use crate::cursor;
 use std::io::{BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct State {
@@ -20,7 +20,8 @@ struct State {
     shape_seq: u64,
 }
 
-pub fn spawn(port: u16, display: u32, display_points: (u32, u32)) -> anyhow::Result<()> {
+/// `display` can change when the virtual display is recreated.
+pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     println!("cursor channel on 0.0.0.0:{port}");
 
@@ -41,7 +42,7 @@ pub fn spawn(port: u16, display: u32, display_points: (u32, u32)) -> anyhow::Res
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
-                let pos = cursor::position(display);
+                let pos = cursor::position(display.load(Ordering::Relaxed));
                 let new_seed = cursor::shape_seed();
                 tick = tick.wrapping_add(1);
                 // The seed does not catch every change (e.g. cursors hidden and shown again),
@@ -105,11 +106,14 @@ fn send(w: &mut impl Write, body: &[u8]) -> std::io::Result<()> {
 fn client_loop(stream: TcpStream, state: &Mutex<State>) -> std::io::Result<()> {
     let mut w = BufWriter::new(stream);
     let (mut pos_seq, mut shape_seq) = (0u64, 0u64);
+    let mut last_pos_sent = Instant::now();
     loop {
         let (pos, shape) = {
             let st = state.lock().unwrap();
             (
-                (st.pos_seq != pos_seq).then(|| (st.pos, st.pos_seq)),
+                // Also resend once a second so the client can detect a dead connection.
+                (st.pos_seq != pos_seq || last_pos_sent.elapsed() >= Duration::from_secs(1))
+                    .then(|| (st.pos, st.pos_seq)),
                 (st.shape_seq != shape_seq).then(|| (st.shape.clone(), st.shape_seq)),
             )
         };
@@ -121,6 +125,7 @@ fn client_loop(stream: TcpStream, state: &Mutex<State>) -> std::io::Result<()> {
         }
         if let Some((Some(p), seq)) = pos {
             pos_seq = seq;
+            last_pos_sent = Instant::now();
             let mut m = [0u8; 10];
             m[0] = 1;
             m[1..5].copy_from_slice(&p.x.to_be_bytes());

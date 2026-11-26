@@ -6,6 +6,8 @@
 //!   payload_len u32 | flags u8 | pts_us u64 | payload (Annex-B H.264 or HEVC)
 //! flags bit 0 = keyframe (payload starts with the parameter sets - SPS+PPS, or VPS+SPS+PPS
 //!               for HEVC - then the IDR picture).
+//! flags bit 2 = heartbeat: empty payload, sent once a second when no video is flowing so that
+//!               clients can tell a silent screen from a dead connection.
 //! flags bit 1 = repeat: re-encode of the previous picture, sent only to flush the
 //!               decoder's output queue; clients may ignore it for statistics.
 
@@ -17,6 +19,7 @@ pub const CODEC_H264: u8 = 1;
 pub const CODEC_HEVC: u8 = 2;
 pub const FLAG_KEYFRAME: u8 = 1;
 pub const FLAG_REPEAT: u8 = 2;
+pub const FLAG_HEARTBEAT: u8 = 4;
 
 #[derive(Clone, Copy)]
 pub struct Hello {

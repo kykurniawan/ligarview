@@ -2,12 +2,13 @@
 //! A new connection replaces the previous one and triggers a keyframe.
 
 use crate::encoder::Packet;
-use crate::protocol::{write_frame, write_hello, Hello, FLAG_KEYFRAME, FLAG_REPEAT};
+use crate::protocol::{write_frame, write_hello, Hello, FLAG_HEARTBEAT, FLAG_KEYFRAME, FLAG_REPEAT};
 use anyhow::Result;
 use std::io::{BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 type ClientSlot = Arc<Mutex<Option<SyncSender<Arc<Packet>>>>>;
@@ -79,7 +80,16 @@ fn client_loop(stream: TcpStream, hello: Hello, rx: Receiver<Arc<Packet>>) -> st
     let mut w = BufWriter::with_capacity(256 * 1024, stream);
     write_hello(&mut w, hello)?;
     w.flush()?;
-    for pkt in rx {
+    loop {
+        let pkt = match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(pkt) => pkt,
+            Err(RecvTimeoutError::Timeout) => {
+                write_frame(&mut w, FLAG_HEARTBEAT, 0, &[])?;
+                w.flush()?;
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        };
         let flags = if pkt.keyframe { FLAG_KEYFRAME } else { 0 } | if pkt.repeat { FLAG_REPEAT } else { 0 };
         write_frame(&mut w, flags, pkt.pts_us, &pkt.data)?;
         w.flush()?;

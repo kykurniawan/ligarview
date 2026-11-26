@@ -1,3 +1,4 @@
+mod adb;
 mod capture;
 mod cursor;
 mod cursor_server;
@@ -8,10 +9,10 @@ mod virtual_display;
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
-use virtual_display::VirtualDisplay;
+use virtual_display::{pump_run_loop, VirtualDisplay};
 
 #[derive(Clone, Copy, ValueEnum)]
 enum CodecArg {
@@ -57,6 +58,12 @@ struct Args {
     /// Print capture/encode rates once per second
     #[arg(long)]
     stats: bool,
+    /// Do not manage `adb reverse` tunnels automatically
+    #[arg(long)]
+    no_adb: bool,
+    /// Test helper: drop the virtual display after N seconds to exercise recovery
+    #[arg(long)]
+    debug_drop_display_after: Option<u64>,
     /// Diagnostic: print the current system cursor shape for a few seconds and exit
     #[arg(long)]
     cursor_test: bool,
@@ -78,16 +85,76 @@ extern "C" {
     fn CGWarpMouseCursorPosition(p: CGPoint) -> i32;
 }
 
-fn wiggle(display: u32, until: Instant) {
-    let b = unsafe { CGDisplayBounds(display) };
-    let (cx, cy) = (b.origin.x + b.size.x / 2.0, b.origin.y + b.size.y / 2.0);
+fn wiggle(display: Arc<AtomicU32>, until: Instant) {
     let mut t = 0.0f64;
     while Instant::now() < until {
+        let b = unsafe { CGDisplayBounds(display.load(Ordering::Relaxed)) };
+        let (cx, cy) = (b.origin.x + b.size.x / 2.0, b.origin.y + b.size.y / 2.0);
         let p = CGPoint { x: cx + 300.0 * t.cos(), y: cy + 200.0 * t.sin() };
         unsafe { CGWarpMouseCursorPosition(p) };
         t += 0.08;
         std::thread::sleep(Duration::from_millis(16));
     }
+}
+
+/// Creates the virtual display and switches it to the requested (HiDPI) mode.
+///
+/// With `strict`, failing to reach the requested mode is an error (the picture would be blurry);
+/// at startup it is only reported.
+fn create_display(a: &Args, strict: bool) -> Result<VirtualDisplay> {
+    let (px_w, px_h) = (a.width * a.scale, a.height * a.scale);
+    let vd = VirtualDisplay::create(a.width, a.height, a.scale, a.fps as f64)?;
+    println!("virtual display id={}: {}", vd.id, VirtualDisplay::describe(vd.id));
+    // macOS needs a moment before it accepts a mode change on a new display.
+    let mut selected = Err(anyhow::anyhow!("not tried"));
+    for _ in 0..15 {
+        pump_run_loop(Duration::from_millis(300));
+        selected = VirtualDisplay::select_mode(vd.id, (a.width, a.height), (px_w, px_h));
+        if selected.is_ok() {
+            break;
+        }
+    }
+    match selected {
+        Ok(()) => {
+            let (x, y, w, h) = VirtualDisplay::bounds(vd.id);
+            println!("selected mode: {} at ({x:.0},{y:.0}) {w:.0}x{h:.0} pts", VirtualDisplay::describe(vd.id));
+        }
+        Err(e) if strict => return Err(anyhow::anyhow!("could not select mode: {e}")),
+        Err(e) => println!("could not select mode: {e}"),
+    }
+    Ok(vd)
+}
+
+/// Starts capturing `display`; ScreenCaptureKit needs a moment before it lists a new display.
+fn start_capture(
+    a: &Args,
+    codec: encoder::Codec,
+    display: u32,
+    tx: &mpsc::Sender<encoder::Packet>,
+    info_tx: &mpsc::Sender<String>,
+    key_request: &Arc<AtomicBool>,
+) -> Result<capture::Capture> {
+    let (px_w, px_h) = (a.width * a.scale, a.height * a.scale);
+    let mut last_err = None;
+    for _ in 0..20 {
+        let s = capture::Settings {
+            codec,
+            low_latency_rc: a.low_latency_rc,
+            show_cursor: a.cursor_in_video,
+            width: px_w,
+            height: px_h,
+            fps: a.fps,
+            bitrate_bps: a.bitrate * 1_000_000,
+        };
+        match capture::start(display, s, tx.clone(), info_tx.clone(), key_request.clone()) {
+            Ok(c) => return Ok(c),
+            Err(e) => {
+                last_err = Some(e);
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        }
+    }
+    Err(last_err.unwrap())
 }
 
 fn main() -> Result<()> {
@@ -106,74 +173,107 @@ fn main() -> Result<()> {
                     None => println!("seed {s}: no shape"),
                 }
             }
-            let p = cursor::position(1);
-            if seed == s { let _ = p; }
             std::thread::sleep(Duration::from_millis(100));
         }
         return Ok(());
     }
-    let vd = VirtualDisplay::create(a.width, a.height, a.scale, a.fps as f64)?;
+
     let (px_w, px_h) = (a.width * a.scale, a.height * a.scale);
-    println!("virtual display id={}: {}", vd.id, VirtualDisplay::describe(vd.id));
-    // macOS needs a moment before it accepts a mode change on a new display.
-    let mut selected = Err(anyhow::anyhow!("not tried"));
-    for _ in 0..15 {
-        std::thread::sleep(Duration::from_millis(300));
-        selected = VirtualDisplay::select_mode(vd.id, (a.width, a.height), (px_w, px_h));
-        if selected.is_ok() {
-            break;
-        }
-    }
-    match selected {
-        Ok(()) => {
-            let (x, y, w, h) = VirtualDisplay::bounds(vd.id);
-            println!("selected mode: {} at ({x:.0},{y:.0}) {w:.0}x{h:.0} pts", VirtualDisplay::describe(vd.id));
-        }
-        Err(e) => println!("could not select mode: {e}"),
-    }
+    let codec = match a.codec {
+        CodecArg::H264 => encoder::Codec::H264,
+        CodecArg::Hevc => encoder::Codec::Hevc,
+    };
+
+    let mut vd = Some(create_display(&a, false)?);
     for (id, w, h) in VirtualDisplay::active_displays() {
-        println!("  display {id}: {w}x{h}{}", if id == vd.id { "  <- ligarview" } else { "" });
+        println!("  display {id}: {w}x{h}{}", if Some(id) == vd.as_ref().map(|v| v.id) { "  <- ligarview" } else { "" });
     }
+    let display_id = Arc::new(AtomicU32::new(vd.as_ref().unwrap().id));
 
     let (tx, rx) = mpsc::channel();
     let (info_tx, info_rx) = mpsc::channel();
     let key_request = Arc::new(AtomicBool::new(true));
 
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
-    let codec = match a.codec {
-        CodecArg::H264 => encoder::Codec::H264,
-        CodecArg::Hevc => encoder::Codec::Hevc,
-    };
     let hello = protocol::Hello { codec: codec.id(), width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     server::spawn(a.port, hello, rx, key_request.clone(), dump)?;
+    let mut ports = vec![a.port];
     if !a.cursor_in_video {
-        cursor_server::spawn(a.port + 1, vd.id, (a.width, a.height))?;
+        cursor_server::spawn(a.port + 1, display_id.clone(), (a.width, a.height))?;
+        ports.push(a.port + 1);
+    }
+    if !a.no_adb {
+        adb::spawn(ports);
     }
 
-    // The display needs a moment before ScreenCaptureKit lists it.
-    let mut capture = None;
-    let mut last_err = None;
-    for _ in 0..20 {
-        let s = capture::Settings { codec, low_latency_rc: a.low_latency_rc, show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
-        match capture::start(vd.id, s, tx.clone(), info_tx.clone(), key_request.clone()) {
-            Ok(c) => { capture = Some(c); break; }
-            Err(e) => { last_err = Some(e); std::thread::sleep(Duration::from_millis(500)); }
-        }
-    }
-    let Some(_capture) = capture else { return Err(last_err.unwrap()) };
+    let mut capture = Some(start_capture(&a, codec, display_id.load(Ordering::Relaxed), &tx, &info_tx, &key_request)?);
     println!("capturing {px_w}x{px_h} @ {} fps, {} Mbps, {codec:?}", a.fps, a.bitrate);
 
     let deadline = Instant::now() + Duration::from_secs(if a.seconds == 0 { u64::MAX / 4 } else { a.seconds });
     if a.wiggle {
-        let id = vd.id;
+        let id = display_id.clone();
         std::thread::spawn(move || wiggle(id, deadline));
     }
+    let mut drop_at = a.debug_drop_display_after.map(|s| Instant::now() + Duration::from_secs(s));
+    let mut last_health = Instant::now();
     let mut last = (0u64, 0u64, Instant::now());
     let mut lat_prev = (0u64, 0u64, 0u64, 0u64);
     while Instant::now() < deadline {
-        if let Ok(m) = info_rx.recv_timeout(Duration::from_millis(200)) {
+        while let Ok(m) = info_rx.try_recv() {
             println!("{m}");
         }
+        pump_run_loop(Duration::from_millis(100));
+
+        // Supervisor: rebuild the display and capture if either went away
+        // (system sleep/wake, display reconfiguration, ScreenCaptureKit stopping).
+        if last_health.elapsed() >= Duration::from_millis(500) {
+            last_health = Instant::now();
+            let mut healthy = capture.as_ref().is_some_and(|c| c.is_alive())
+                && vd.as_ref().is_some_and(|v| VirtualDisplay::is_active(v.id));
+            if drop_at.is_some_and(|t| Instant::now() >= t) {
+                drop_at = None;
+                healthy = false;
+                println!("(debug) dropping the display to test recovery");
+            }
+            if !healthy {
+                println!("display or capture lost; recreating...");
+                let old_id = vd.as_ref().map(|v| v.id);
+                capture = None;
+                vd = None;
+                // macOS releases the old display asynchronously; creating the new one too early
+                // yields a display without any modes.
+                if let Some(id) = old_id {
+                    for _ in 0..50 {
+                        if !VirtualDisplay::is_active(id) {
+                            break;
+                        }
+                        pump_run_loop(Duration::from_millis(100));
+                    }
+                }
+                pump_run_loop(Duration::from_secs(1));
+                while Instant::now() < deadline {
+                    let attempt = create_display(&a, true).and_then(|v| {
+                        let c = start_capture(&a, codec, v.id, &tx, &info_tx, &key_request)?;
+                        Ok((v, c))
+                    });
+                    match attempt {
+                        Ok((v, c)) => {
+                            display_id.store(v.id, Ordering::Relaxed);
+                            vd = Some(v);
+                            capture = Some(c);
+                            key_request.store(true, Ordering::SeqCst);
+                            println!("recovered: display {}", display_id.load(Ordering::Relaxed));
+                            break;
+                        }
+                        Err(e) => {
+                            println!("recovery failed: {e}; retrying in 2 s");
+                            std::thread::sleep(Duration::from_secs(2));
+                        }
+                    }
+                }
+            }
+        }
+
         if a.stats && last.2.elapsed() >= Duration::from_secs(1) {
             use std::sync::atomic::Ordering::Relaxed;
             let (c, e) = (capture::FRAMES_CAPTURED.load(Relaxed), encoder::PACKETS_ENCODED.load(Relaxed));

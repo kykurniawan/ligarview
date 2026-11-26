@@ -60,6 +60,7 @@ class CursorClient(
     private fun session() {
         Socket().also { socket = it }.use { sock ->
             sock.tcpNoDelay = true
+            sock.soTimeout = READ_TIMEOUT_MS // the host resends the position every second
             sock.connect(InetSocketAddress(host, port), 3000)
             connected = true
             val input = DataInputStream(BufferedInputStream(sock.getInputStream(), 16 * 1024))
@@ -92,5 +93,6 @@ class CursorClient(
         const val TYPE_POSITION = 1
         const val TYPE_SHAPE = 2
         const val MAX_MESSAGE_BYTES = 1 shl 20
+        const val READ_TIMEOUT_MS = 4000
     }
 }

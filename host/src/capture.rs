@@ -145,6 +145,14 @@ impl SCStreamOutputTrait for Handler {
 pub struct Capture {
     _stream: SCStream,
     stop: Arc<AtomicBool>,
+    alive: Arc<AtomicBool>,
+}
+
+impl Capture {
+    /// False once ScreenCaptureKit has stopped the stream (e.g. after sleep or display loss).
+    pub fn is_alive(&self) -> bool {
+        self.alive.load(Ordering::SeqCst)
+    }
 }
 
 impl Drop for Capture {
@@ -196,7 +204,13 @@ pub fn start(
         repeats: AtomicU32::new(FLUSH_REPEATS),
     });
 
-    let mut stream = SCStream::new(&filter, &config).map_err(|e| anyhow!("{e:?}"))?;
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_flag = alive.clone();
+    let delegate = screencapturekit::stream::delegate_trait::ErrorHandler::new(move |e| {
+        eprintln!("capture stopped: {e}");
+        alive_flag.store(false, Ordering::SeqCst);
+    });
+    let mut stream = SCStream::new_with_delegate(&filter, &config, delegate).map_err(|e| anyhow!("{e:?}"))?;
     let _ = stream.add_output_handler(Handler(shared.clone()), SCStreamOutputType::Screen);
     stream.start_capture().map_err(|e| anyhow!("{e:?}"))?;
 
@@ -254,5 +268,5 @@ pub fn start(
         });
     }
 
-    Ok(Capture { _stream: stream, stop })
+    Ok(Capture { _stream: stream, stop, alive })
 }
