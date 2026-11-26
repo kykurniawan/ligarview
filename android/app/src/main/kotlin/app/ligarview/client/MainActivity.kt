@@ -28,6 +28,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var hostInput: EditText
 
     private var client: StreamClient? = null
+    private var cursorClient: CursorClient? = null
+    private lateinit var cursorOverlay: CursorOverlay
     private var surfaceReady = false
 
     /** True while the user wants a connection (panel hidden). */
@@ -51,8 +53,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    override fun onPause() {
+        cursorOverlay.stop()
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        cursorOverlay.start()
         requestHighRefreshRate()
     }
 
@@ -102,6 +110,13 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
+
+        val cursorView = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.FIT_XY
+            visibility = View.INVISIBLE
+        }
+        root.addView(cursorView, FrameLayout.LayoutParams(1, 1))
+        cursorOverlay = CursorOverlay(cursorView, root)
 
         stats = TextView(this).apply {
             setTextColor(Color.GREEN)
@@ -209,9 +224,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 status.visibility = if (streaming) View.GONE else View.VISIBLE
             }
         }.also { it.start() }
+        cursorClient = CursorClient(host, port + 1, cursorOverlay).also { it.start() }
+        cursorOverlay.enabled = true
     }
 
     private fun stopClient() {
+        cursorOverlay.enabled = false
+        cursorClient?.stop()
+        cursorClient = null
         client?.stop()
         client = null
     }

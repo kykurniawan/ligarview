@@ -53,6 +53,7 @@ extern "C" {
 pub static FRAMES_CAPTURED: AtomicU64 = AtomicU64::new(0);
 
 pub struct Settings {
+    pub show_cursor: bool,
     pub width: u32,
     pub height: u32,
     pub fps: u32,
@@ -173,7 +174,7 @@ pub fn start(
         .with_height(settings.height)
         .with_pixel_format(PixelFormat::YCbCr_420v)
         .with_queue_depth(3)
-        .with_shows_cursor(true)
+        .with_shows_cursor(settings.show_cursor)
         .with_minimum_frame_interval(&screencapturekit::cm::CMTime::new(1, settings.fps as i32));
 
     let shared = Arc::new(Shared {

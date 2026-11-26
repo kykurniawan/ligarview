@@ -53,17 +53,28 @@ Early work in progress.
 
 2. Android: build and install the app (`cd android && ./gradlew installDebug`).
 3. Connect:
-   - **USB**: enable USB debugging, run `adb reverse tcp:7878 tcp:7878`, open the app and connect to `127.0.0.1:7878`.
-   - **Wi-Fi**: open the app and connect to `<mac-ip>:7878` (same network, 5 GHz recommended).
+   - **USB**: enable USB debugging, run `adb reverse tcp:7878 tcp:7878 && adb reverse tcp:7879 tcp:7879` (video + cursor), open the app and connect to `127.0.0.1:7878`.
+   - **Wi-Fi**: open the app and connect to `<mac-ip>:7878` (same network, 5 GHz recommended). Ports 7878 and 7879 must be reachable.
 
 The app reconnects automatically and remembers the last address. Back returns to the connect screen.
 Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
 
-Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the stream to a file.
+Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the video, `python3 tools/dump_cursor.py` prints cursor messages.
+
+## Cursor
+
+The cursor is not part of the video. The host sends its position (and shape, when it changes)
+on a second connection (video port + 1) and the tablet draws it on top, once per vsync, so the
+cursor does not wait for capture + encode + decode. Use `--cursor-in-video` to fall back to a
+cursor rendered into the video.
+
+For a smooth 120 Hz panel on Samsung tablets set Settings > Display > Motion smoothness to
+Adaptive and turn off Power saving.
 
 ## Protocol
 
-See [`host/src/protocol.rs`](host/src/protocol.rs): a 12-byte hello, then length-prefixed Annex-B H.264 frames.
+Video: [`host/src/protocol.rs`](host/src/protocol.rs) (a 12-byte hello, then length-prefixed Annex-B H.264 frames).
+Cursor: [`host/src/cursor_server.rs`](host/src/cursor_server.rs).
 
 ## Notes
 

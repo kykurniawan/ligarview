@@ -1,4 +1,6 @@
 mod capture;
+mod cursor;
+mod cursor_server;
 mod encoder;
 mod protocol;
 mod server;
@@ -36,9 +38,15 @@ struct Args {
     /// Also write the raw H.264 stream to this file (debugging)
     #[arg(long)]
     out: Option<String>,
+    /// Keep the cursor inside the video instead of drawing it on the tablet (adds latency)
+    #[arg(long)]
+    cursor_in_video: bool,
     /// Print capture/encode rates once per second
     #[arg(long)]
     stats: bool,
+    /// Diagnostic: print the current system cursor shape for a few seconds and exit
+    #[arg(long)]
+    cursor_test: bool,
     /// Test helper: move the cursor around the virtual display so frames change
     #[arg(long)]
     wiggle: bool,
@@ -71,6 +79,26 @@ fn wiggle(display: u32, until: Instant) {
 
 fn main() -> Result<()> {
     let a = Args::parse();
+    if a.cursor_test {
+        let mut seed = -1;
+        for _ in 0..80 {
+            let s = cursor::shape_seed();
+            if s != seed {
+                seed = s;
+                match cursor::current_shape() {
+                    Some(sh) => {
+                        println!("seed {s}: {:.0}x{:.0} pts, hot ({:.0},{:.0}), png {} bytes", sh.width_pts, sh.height_pts, sh.hot_x_pts, sh.hot_y_pts, sh.png.len());
+                        std::fs::write(format!("out/cursor_{s}.png"), &sh.png)?;
+                    }
+                    None => println!("seed {s}: no shape"),
+                }
+            }
+            let p = cursor::position(1);
+            if seed == s { let _ = p; }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        return Ok(());
+    }
     let vd = VirtualDisplay::create(a.width, a.height, a.scale, a.fps as f64)?;
     let (px_w, px_h) = (a.width * a.scale, a.height * a.scale);
     println!("virtual display id={}: {}", vd.id, VirtualDisplay::describe(vd.id));
@@ -98,12 +126,15 @@ fn main() -> Result<()> {
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
     let hello = protocol::Hello { width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     server::spawn(a.port, hello, rx, key_request.clone(), dump)?;
+    if !a.cursor_in_video {
+        cursor_server::spawn(a.port + 1, vd.id, (a.width, a.height))?;
+    }
 
     // The display needs a moment before ScreenCaptureKit lists it.
     let mut capture = None;
     let mut last_err = None;
     for _ in 0..20 {
-        let s = capture::Settings { width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
+        let s = capture::Settings { show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
         match capture::start(vd.id, s, tx.clone(), info_tx.clone(), key_request.clone()) {
             Ok(c) => { capture = Some(c); break; }
             Err(e) => { last_err = Some(e); std::thread::sleep(Duration::from_millis(500)); }
