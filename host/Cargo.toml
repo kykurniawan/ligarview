@@ -2,6 +2,8 @@
 name = "ligarview-host"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "Use an Android tablet as an extended display for your Mac"
 
 [dependencies]
 objc2 = "0.6"

@@ -47,3 +47,7 @@ cargo run --release -- --seconds 8 --wiggle --out out/test.h264
 
 The virtual display uses the private `CGVirtualDisplay` API. It works without
 SIP changes or kernel extensions, but Apple may change it in a macOS update.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
