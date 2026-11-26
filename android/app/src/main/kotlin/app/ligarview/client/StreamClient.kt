@@ -90,7 +90,13 @@ class StreamClient(
             val height = input.readUnsignedShort()
             val fps = input.readUnsignedShort()
 
-            if (fps > 0) surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+            if (fps > 0) {
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ALWAYS)
+                } else {
+                    surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+                }
+            }
             val decoder = VideoDecoder(surface, width, height).also { this.decoder = it }
             try {
                 onStatus("Connected: ${width}x$height @ $fps fps", false)

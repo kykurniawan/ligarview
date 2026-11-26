@@ -51,6 +51,24 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        requestHighRefreshRate()
+    }
+
+    /**
+     * Pin the panel to its fastest mode. Samsung's adaptive refresh drops to 30 Hz when the
+     * stream is nearly static and takes a while to ramp back up, which feels like input lag.
+     */
+    private fun requestHighRefreshRate() {
+        val d = display ?: return
+        val current = d.mode
+        val fastest = d.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
@@ -152,7 +170,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 if (lastTime != 0L && dt > 0 && frames >= lastFrames) {
                     val fps = (frames - lastFrames) / dt
                     val mbps = (bytes - lastBytes) * 8 / dt / 1e6
-                    val text = "%.0f fps  %.1f Mbps  decode %.1f ms".format(fps, mbps, c.decodeLatencyMs)
+                    val hz = display?.refreshRate ?: 0f
+                    val text = "%.0f fps  %.1f Mbps  decode %.1f ms  panel %.0f Hz".format(fps, mbps, c.decodeLatencyMs, hz)
                     stats.text = text
                     android.util.Log.d("Ligarview", text)
                 }
