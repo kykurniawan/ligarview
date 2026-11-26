@@ -1,0 +1,12 @@
+[package]
+name = "ligarview-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-core-foundation = "0.3"
+anyhow = "1"
+screencapturekit = "12.0.0"
+clap = { version = "4.6.10", features = ["derive"] }

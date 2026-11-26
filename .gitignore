@@ -1,0 +1,19 @@
+# Rust
+host/target/
+host/out/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+*.apk
+*.aab
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
