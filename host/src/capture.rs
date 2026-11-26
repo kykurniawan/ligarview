@@ -3,13 +3,17 @@
 //! ScreenCaptureKit only delivers frames when the screen changes. To serve a
 //! keyframe to a newly connected client on a static screen, the last captured
 //! frame is retained and re-encoded on request.
+//!
+//! The retained frame is also re-sent twice shortly after the screen goes idle:
+//! hardware decoders hold back the newest frame, so without these repeats the
+//! final cursor position would stay invisible until the next screen change.
 
 use crate::encoder::{Encoder, Packet};
 use anyhow::{anyhow, Result};
 use screencapturekit::cm::CMSampleBufferExt;
 use screencapturekit::prelude::*;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -45,6 +49,9 @@ impl Drop for Held {
     }
 }
 
+/// Extra copies of the last frame sent once the screen goes idle.
+const FLUSH_REPEATS: u32 = 2;
+
 struct Shared {
     settings: Settings,
     tx: Sender<Packet>,
@@ -53,10 +60,13 @@ struct Shared {
     last: Mutex<Option<Held>>,
     start: Instant,
     key_request: Arc<AtomicBool>,
+    /// Microseconds since `start` of the last real frame from ScreenCaptureKit.
+    last_real_us: AtomicU64,
+    repeats: AtomicU32,
 }
 
 impl Shared {
-    fn encode(&self, pb: *const c_void, force_key: bool) {
+    fn encode(&self, pb: *const c_void, force_key: bool, repeat: bool) {
         let mut guard = self.encoder.lock().unwrap();
         if guard.is_none() {
             // Size the encoder from the real frame so it matches what SCK delivers.
@@ -72,7 +82,7 @@ impl Shared {
         }
         let pts = self.start.elapsed().as_micros() as i64;
         let force = force_key;
-        if let Err(e) = guard.as_ref().unwrap().encode(pb, pts, 1_000_000, force) {
+        if let Err(e) = guard.as_ref().unwrap().encode(pb, pts, 1_000_000, force, repeat) {
             let _ = self.info.send(format!("encode error: {e}"));
         }
     }
@@ -89,8 +99,10 @@ impl SCStreamOutputTrait for Handler {
         FRAMES_CAPTURED.fetch_add(1, Ordering::Relaxed);
         let ptr = pb.as_ptr() as *const c_void;
         *self.0.last.lock().unwrap() = Some(Held(unsafe { CFRetain(ptr) }));
+        self.0.last_real_us.store(self.0.start.elapsed().as_micros() as u64, Ordering::SeqCst);
+        self.0.repeats.store(0, Ordering::SeqCst);
         let force = self.0.key_request.swap(false, Ordering::SeqCst);
-        self.0.encode(ptr, force);
+        self.0.encode(ptr, force, false);
     }
 }
 
@@ -142,6 +154,8 @@ pub fn start(
         last: Mutex::new(None),
         start: Instant::now(),
         key_request,
+        last_real_us: AtomicU64::new(0),
+        repeats: AtomicU32::new(FLUSH_REPEATS),
     });
 
     let mut stream = SCStream::new(&filter, &config).map_err(|e| anyhow!("{e:?}"))?;
@@ -153,15 +167,28 @@ pub fn start(
     {
         let (shared, stop) = (shared.clone(), stop.clone());
         std::thread::spawn(move || {
+            let interval_us = 1_000_000 / u64::from(shared.settings.fps.max(1));
             while !stop.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_millis(30));
-                if !shared.key_request.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(3));
+                if shared.key_request.load(Ordering::SeqCst) {
+                    let last = shared.last.lock().unwrap();
+                    if let Some(held) = last.as_ref() {
+                        if shared.key_request.swap(false, Ordering::SeqCst) {
+                            shared.encode(held.0, true, true);
+                        }
+                    }
                     continue;
                 }
-                let last = shared.last.lock().unwrap();
-                if let Some(held) = last.as_ref() {
-                    if shared.key_request.swap(false, Ordering::SeqCst) {
-                        shared.encode(held.0, true);
+                let n = shared.repeats.load(Ordering::SeqCst);
+                if n >= FLUSH_REPEATS {
+                    continue;
+                }
+                let idle_us = (shared.start.elapsed().as_micros() as u64).saturating_sub(shared.last_real_us.load(Ordering::SeqCst));
+                if idle_us > interval_us * (u64::from(n) + 2) {
+                    let last = shared.last.lock().unwrap();
+                    if let Some(held) = last.as_ref() {
+                        shared.repeats.store(n + 1, Ordering::SeqCst);
+                        shared.encode(held.0, false, true);
                     }
                 }
             }

@@ -109,6 +109,8 @@ pub static PACKETS_ENCODED: std::sync::atomic::AtomicU64 = std::sync::atomic::At
 
 pub struct Packet {
     pub keyframe: bool,
+    /// Re-encode of the previous picture (decoder flush), not new content.
+    pub repeat: bool,
     pub pts_us: i64,
     /// Annex-B (start-code) NAL units; keyframes are prefixed with SPS+PPS.
     pub data: Vec<u8>,
@@ -194,7 +196,7 @@ impl Encoder {
     }
 
     /// `pixel_buffer` is a CVPixelBufferRef, borrowed for the duration of the call.
-    pub fn encode(&self, pixel_buffer: *const c_void, pts_value: i64, pts_timescale: i32, force_key: bool) -> Result<()> {
+    pub fn encode(&self, pixel_buffer: *const c_void, pts_value: i64, pts_timescale: i32, force_key: bool, repeat: bool) -> Result<()> {
         unsafe {
             let pts = CMTime { value: pts_value, timescale: pts_timescale, flags: 1, epoch: 0 };
             let invalid = CMTime { value: 0, timescale: 0, flags: 0, epoch: 0 };
@@ -219,7 +221,7 @@ impl Encoder {
                 pts,
                 invalid,
                 props,
-                std::ptr::null_mut(),
+                repeat as usize as *mut c_void,
                 &mut flags,
             );
             if !props.is_null() {
@@ -242,7 +244,7 @@ impl Drop for Encoder {
 
 extern "C" fn output_callback(
     refcon: *mut c_void,
-    _frame_refcon: *mut c_void,
+    frame_refcon: *mut c_void,
     status: OSStatus,
     _flags: u32,
     sb: *const c_void,
@@ -294,6 +296,6 @@ extern "C" fn output_callback(
         let pts = CMSampleBufferGetPresentationTimeStamp(sb);
         let pts_us = if pts.timescale > 0 { pts.value * 1_000_000 / pts.timescale as i64 } else { 0 };
         PACKETS_ENCODED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let _ = tx.send(Packet { keyframe, pts_us, data: out });
+        let _ = tx.send(Packet { keyframe, repeat: frame_refcon as usize != 0, pts_us, data: out });
     }
 }

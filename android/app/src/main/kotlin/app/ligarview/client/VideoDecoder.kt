@@ -41,14 +41,15 @@ class VideoDecoder(surface: Surface, width: Int, height: Int) {
     }
 
     /** Queues one Annex-B access unit. Returns false if the decoder had no free input buffer. */
-    fun feed(data: ByteArray, length: Int, ptsUs: Long): Boolean {
+    fun feed(data: ByteArray, length: Int, ptsUs: Long, repeat: Boolean = false): Boolean {
         val index = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
         if (index < 0) return false
         val buffer = codec.getInputBuffer(index) ?: return false
         buffer.clear()
         buffer.put(data, 0, length)
         if (queuedAt.size > 256) queuedAt.clear() // frames that never came out
-        queuedAt[ptsUs] = System.nanoTime()
+        // Repeats only flush the decoder; timing them would skew the latency figure.
+        if (!repeat) queuedAt[ptsUs] = System.nanoTime()
         codec.queueInputBuffer(index, 0, length, ptsUs, 0)
         return true
     }

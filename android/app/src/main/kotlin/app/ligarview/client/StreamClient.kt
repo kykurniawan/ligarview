@@ -98,13 +98,13 @@ class StreamClient(
                 var first = true
                 while (running) {
                     val length = input.readInt()
-                    input.readUnsignedByte() // flags (bit 0 = keyframe), unused by the client for now
+                    val flags = input.readUnsignedByte()
                     val ptsUs = input.readLong()
                     if (length < 0 || length > MAX_FRAME_BYTES) throw IOException("Bad frame size $length")
                     if (buffer.size < length) buffer = ByteArray(length)
                     input.readFully(buffer, 0, length)
                     bytesReceived.addAndGet(length + 13L)
-                    if (decoder.feed(buffer, length, ptsUs) && first) {
+                    if (decoder.feed(buffer, length, ptsUs, repeat = flags and FLAG_REPEAT != 0) && first) {
                         first = false
                         onStatus("Streaming", true)
                     }
@@ -120,6 +120,7 @@ class StreamClient(
         val MAGIC = "LGRV".toByteArray()
         const val VERSION = 1
         const val CODEC_H264 = 1
+        const val FLAG_REPEAT = 2
         const val CONNECT_TIMEOUT_MS = 3000
         const val RETRY_DELAY_MS = 1000L
         const val MAX_FRAME_BYTES = 16 * 1024 * 1024

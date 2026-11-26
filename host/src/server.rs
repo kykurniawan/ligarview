@@ -2,7 +2,7 @@
 //! A new connection replaces the previous one and triggers a keyframe.
 
 use crate::encoder::Packet;
-use crate::protocol::{write_frame, write_hello, Hello};
+use crate::protocol::{write_frame, write_hello, Hello, FLAG_KEYFRAME, FLAG_REPEAT};
 use anyhow::Result;
 use std::io::{BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
@@ -80,7 +80,8 @@ fn client_loop(stream: TcpStream, hello: Hello, rx: Receiver<Arc<Packet>>) -> st
     write_hello(&mut w, hello)?;
     w.flush()?;
     for pkt in rx {
-        write_frame(&mut w, pkt.keyframe, pkt.pts_us, &pkt.data)?;
+        let flags = if pkt.keyframe { FLAG_KEYFRAME } else { 0 } | if pkt.repeat { FLAG_REPEAT } else { 0 };
+        write_frame(&mut w, flags, pkt.pts_us, &pkt.data)?;
         w.flush()?;
     }
     Ok(())
