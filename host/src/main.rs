@@ -118,6 +118,7 @@ fn main() -> Result<()> {
         std::thread::spawn(move || wiggle(id, deadline));
     }
     let mut last = (0u64, 0u64, Instant::now());
+    let mut lat_prev = (0u64, 0u64, 0u64, 0u64);
     while Instant::now() < deadline {
         if let Ok(m) = info_rx.recv_timeout(Duration::from_millis(200)) {
             println!("{m}");
@@ -126,7 +127,21 @@ fn main() -> Result<()> {
             use std::sync::atomic::Ordering::Relaxed;
             let (c, e) = (capture::FRAMES_CAPTURED.load(Relaxed), encoder::PACKETS_ENCODED.load(Relaxed));
             let dt = last.2.elapsed().as_secs_f64();
-            println!("captured {:.0} fps, encoded {:.0} fps", (c - last.0) as f64 / dt, (e - last.1) as f64 / dt);
+            let cur = (
+                capture::CAPTURE_US_SUM.load(Relaxed),
+                capture::CAPTURE_COUNT.load(Relaxed),
+                encoder::ENCODE_US_SUM.load(Relaxed),
+                encoder::ENCODE_COUNT.load(Relaxed),
+            );
+            let avg = |sum: u64, n: u64| if n == 0 { 0.0 } else { sum as f64 / n as f64 / 1000.0 };
+            println!(
+                "captured {:.0} fps, encoded {:.0} fps | SCK delivery {:.1} ms, encode {:.1} ms",
+                (c - last.0) as f64 / dt,
+                (e - last.1) as f64 / dt,
+                avg(cur.0 - lat_prev.0, cur.1 - lat_prev.1),
+                avg(cur.2 - lat_prev.2, cur.3 - lat_prev.3),
+            );
+            lat_prev = cur;
             last = (c, e, Instant::now());
         }
     }

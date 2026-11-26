@@ -24,6 +24,25 @@ extern "C" {
     fn CFRelease(cf: *const c_void);
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CmTime {
+    value: i64,
+    timescale: i32,
+    flags: u32,
+    epoch: i64,
+}
+
+#[link(name = "CoreMedia", kind = "framework")]
+extern "C" {
+    fn CMClockGetHostTimeClock() -> *const c_void;
+    fn CMClockGetTime(clock: *const c_void) -> CmTime;
+}
+
+/// Sum (microseconds) and count of how late frames reach us after ScreenCaptureKit stamps them.
+pub static CAPTURE_US_SUM: AtomicU64 = AtomicU64::new(0);
+pub static CAPTURE_COUNT: AtomicU64 = AtomicU64::new(0);
+
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
     fn CVPixelBufferGetWidth(pb: *const c_void) -> usize;
@@ -97,6 +116,17 @@ impl SCStreamOutputTrait for Handler {
         }
         let Some(pb) = sample.pixel_buffer() else { return };
         FRAMES_CAPTURED.fetch_add(1, Ordering::Relaxed);
+        let ts = sample.presentation_timestamp();
+        if ts.timescale > 0 {
+            let now = unsafe { CMClockGetTime(CMClockGetHostTimeClock()) };
+            if now.timescale > 0 {
+                let late_us = (now.value as f64 / now.timescale as f64 - ts.value as f64 / ts.timescale as f64) * 1e6;
+                if (0.0..1e6).contains(&late_us) {
+                    CAPTURE_US_SUM.fetch_add(late_us as u64, Ordering::Relaxed);
+                    CAPTURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
         let ptr = pb.as_ptr() as *const c_void;
         *self.0.last.lock().unwrap() = Some(Held(unsafe { CFRetain(ptr) }));
         self.0.last_real_us.store(self.0.start.elapsed().as_micros() as u64, Ordering::SeqCst);

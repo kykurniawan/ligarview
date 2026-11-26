@@ -104,6 +104,16 @@ extern "C" {
     fn VTCompressionSessionInvalidate(session: *mut c_void);
 }
 
+/// Per-frame bookkeeping handed through VideoToolbox to the output callback.
+struct FrameCtx {
+    repeat: bool,
+    submitted: std::time::Instant,
+}
+
+/// Sum (microseconds) and count of encoder latency for real frames (diagnostics).
+pub static ENCODE_US_SUM: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static ENCODE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Packets produced by the encoder (for diagnostics).
 pub static PACKETS_ENCODED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -215,15 +225,19 @@ impl Encoder {
                 std::ptr::null()
             };
             let mut flags = 0u32;
+            let ctx = Box::into_raw(Box::new(FrameCtx { repeat, submitted: std::time::Instant::now() }));
             let st = VTCompressionSessionEncodeFrame(
                 self.session,
                 pixel_buffer,
                 pts,
                 invalid,
                 props,
-                repeat as usize as *mut c_void,
+                ctx as *mut c_void,
                 &mut flags,
             );
+            if st != 0 {
+                drop(Box::from_raw(ctx)); // the callback will never run for this frame
+            }
             if !props.is_null() {
                 CFRelease(props);
             }
@@ -249,6 +263,7 @@ extern "C" fn output_callback(
     _flags: u32,
     sb: *const c_void,
 ) {
+    let ctx = (!frame_refcon.is_null()).then(|| unsafe { Box::from_raw(frame_refcon as *mut FrameCtx) });
     if status != 0 || sb.is_null() {
         return;
     }
@@ -296,6 +311,12 @@ extern "C" fn output_callback(
         let pts = CMSampleBufferGetPresentationTimeStamp(sb);
         let pts_us = if pts.timescale > 0 { pts.value * 1_000_000 / pts.timescale as i64 } else { 0 };
         PACKETS_ENCODED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let _ = tx.send(Packet { keyframe, repeat: frame_refcon as usize != 0, pts_us, data: out });
+        let repeat = ctx.as_ref().is_some_and(|c| c.repeat);
+        if let Some(c) = ctx.as_ref().filter(|c| !c.repeat) {
+            use std::sync::atomic::Ordering::Relaxed;
+            ENCODE_US_SUM.fetch_add(c.submitted.elapsed().as_micros() as u64, Relaxed);
+            ENCODE_COUNT.fetch_add(1, Relaxed);
+        }
+        let _ = tx.send(Packet { keyframe, repeat, pts_us, data: out });
     }
 }
