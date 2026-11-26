@@ -189,8 +189,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                     val text = "%.0f fps  %.1f Mbps  decode %.1f ms  panel %.0f Hz  cursor %s".format(
                         fps, mbps, c.decodeLatencyMs, hz, if (cursorClient?.connected == true) "on" else "OFF",
                     )
-                    stats.text = text
-                    android.util.Log.d("Ligarview", text)
+                    stats.text = text + "\n" + cursorOverlay.debugState()
+                    android.util.Log.d("Ligarview", text + " " + cursorOverlay.debugState())
                 }
                 lastFrames = frames; lastBytes = bytes; lastTime = now
             }

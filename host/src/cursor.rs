@@ -79,48 +79,84 @@ pub struct Shape {
 pub fn current_shape() -> Option<Shape> {
     unsafe {
         let cursor_cls = AnyClass::get(c"NSCursor")?;
-        let rep_cls = AnyClass::get(c"NSBitmapImageRep")?;
-        let dict_cls = AnyClass::get(c"NSDictionary")?;
-
         let cursor: *mut AnyObject = msg_send![cursor_cls, currentSystemCursor];
-        if cursor.is_null() {
-            return None;
-        }
-        let image: *mut AnyObject = msg_send![cursor, image];
-        if image.is_null() {
-            return None;
-        }
-        let hot: CGPoint = msg_send![cursor, hotSpot];
-        let size: CGSize = msg_send![image, size];
-
-        // Best (usually Retina) bitmap for the image.
-        let cg: *const c_void = msg_send![
-            image,
-            CGImageForProposedRect: std::ptr::null_mut::<c_void>(),
-            context: std::ptr::null_mut::<c_void>(),
-            hints: std::ptr::null_mut::<c_void>()
-        ];
-        if cg.is_null() {
-            return None;
-        }
-        let alloc: *mut AnyObject = msg_send![rep_cls, alloc];
-        let rep: *mut AnyObject = msg_send![alloc, initWithCGImage: cg];
-        let rep = Retained::from_raw(rep)?;
-        let props: *mut AnyObject = msg_send![dict_cls, dictionary];
-        // NSBitmapImageFileTypePNG = 4
-        let data: *mut AnyObject = msg_send![&*rep, representationUsingType: 4usize, properties: props];
-        if data.is_null() {
-            return None;
-        }
-        let len: usize = msg_send![data, length];
-        let ptr: *const u8 = msg_send![data, bytes];
-        let png = std::slice::from_raw_parts(ptr, len).to_vec();
-        Some(Shape {
-            png,
-            width_pts: size.width as f32,
-            height_pts: size.height as f32,
-            hot_x_pts: hot.x as f32,
-            hot_y_pts: hot.y as f32,
-        })
+        shape_of(cursor)
     }
+}
+
+/// Renders an `NSCursor` to a PNG.
+unsafe fn shape_of(cursor: *mut AnyObject) -> Option<Shape> {
+    let rep_cls = AnyClass::get(c"NSBitmapImageRep")?;
+    let dict_cls = AnyClass::get(c"NSDictionary")?;
+    if cursor.is_null() {
+        return None;
+    }
+    let image: *mut AnyObject = msg_send![cursor, image];
+    if image.is_null() {
+        return None;
+    }
+    let hot: CGPoint = msg_send![cursor, hotSpot];
+    let size: CGSize = msg_send![image, size];
+
+    // Best (usually Retina) bitmap for the image.
+    let cg: *const c_void = msg_send![
+        image,
+        CGImageForProposedRect: std::ptr::null_mut::<c_void>(),
+        context: std::ptr::null_mut::<c_void>(),
+        hints: std::ptr::null_mut::<c_void>()
+    ];
+    if cg.is_null() {
+        return None;
+    }
+    let alloc: *mut AnyObject = msg_send![rep_cls, alloc];
+    let rep: *mut AnyObject = msg_send![alloc, initWithCGImage: cg];
+    let rep = Retained::from_raw(rep)?;
+    let props: *mut AnyObject = msg_send![dict_cls, dictionary];
+    // NSBitmapImageFileTypePNG = 4
+    let data: *mut AnyObject = msg_send![&*rep, representationUsingType: 4usize, properties: props];
+    if data.is_null() {
+        return None;
+    }
+    let len: usize = msg_send![data, length];
+    let ptr: *const u8 = msg_send![data, bytes];
+    let png = std::slice::from_raw_parts(ptr, len).to_vec();
+    Some(Shape {
+        png,
+        width_pts: size.width as f32,
+        height_pts: size.height as f32,
+        hot_x_pts: hot.x as f32,
+        hot_y_pts: hot.y as f32,
+    })
+}
+
+/// Every standard AppKit cursor, for diagnosing shapes that fail to render.
+pub fn standard_shapes() -> Vec<(&'static str, Option<Shape>)> {
+    let selectors: [(&str, objc2::runtime::Sel); 18] = [
+        ("arrow", objc2::sel!(arrowCursor)),
+        ("iBeam", objc2::sel!(IBeamCursor)),
+        ("crosshair", objc2::sel!(crosshairCursor)),
+        ("closedHand", objc2::sel!(closedHandCursor)),
+        ("openHand", objc2::sel!(openHandCursor)),
+        ("pointingHand", objc2::sel!(pointingHandCursor)),
+        ("resizeLeft", objc2::sel!(resizeLeftCursor)),
+        ("resizeRight", objc2::sel!(resizeRightCursor)),
+        ("resizeLeftRight", objc2::sel!(resizeLeftRightCursor)),
+        ("resizeUp", objc2::sel!(resizeUpCursor)),
+        ("resizeDown", objc2::sel!(resizeDownCursor)),
+        ("resizeUpDown", objc2::sel!(resizeUpDownCursor)),
+        ("disappearingItem", objc2::sel!(disappearingItemCursor)),
+        ("iBeamVertical", objc2::sel!(IBeamCursorForVerticalLayout)),
+        ("operationNotAllowed", objc2::sel!(operationNotAllowedCursor)),
+        ("dragLink", objc2::sel!(dragLinkCursor)),
+        ("dragCopy", objc2::sel!(dragCopyCursor)),
+        ("contextualMenu", objc2::sel!(contextualMenuCursor)),
+    ];
+    let Some(cls) = AnyClass::get(c"NSCursor") else { return vec![] };
+    selectors
+        .into_iter()
+        .map(|(name, sel)| unsafe {
+            let cursor: *mut AnyObject = objc2::msg_send![cls, performSelector: sel];
+            (name, shape_of(cursor))
+        })
+        .collect()
 }

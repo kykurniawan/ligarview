@@ -35,6 +35,7 @@ pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> 
             let mut seed = i32::MIN;
             let mut last_png: Vec<u8> = Vec::new();
             let mut tick = 0u32;
+            let mut was_inside: Option<bool> = None;
             loop {
                 if clients.load(Ordering::Relaxed) == 0 {
                     seed = i32::MIN; // resend the shape to the next client
@@ -43,6 +44,15 @@ pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> 
                     continue;
                 }
                 let pos = cursor::position(display.load(Ordering::Relaxed));
+                if was_inside != Some(pos.inside) {
+                    was_inside = Some(pos.inside);
+                    println!(
+                        "cursor: {} the virtual display at ({:.3}, {:.3})",
+                        if pos.inside { "entered" } else { "left" },
+                        pos.x,
+                        pos.y
+                    );
+                }
                 let new_seed = cursor::shape_seed();
                 tick = tick.wrapping_add(1);
                 // The seed does not catch every change (e.g. cursors hidden and shown again),
@@ -50,7 +60,15 @@ pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> 
                 let shape = (new_seed != seed || tick % 25 == 0)
                     .then(|| {
                         seed = new_seed;
-                        cursor::current_shape().filter(|s| s.png != last_png).map(|s| {
+                        let shape = cursor::current_shape();
+                        if shape.is_none() {
+                            println!("cursor: no image for shape seed {new_seed}");
+                        }
+                        shape.filter(|s| s.png != last_png).map(|s| {
+                            println!(
+                                "cursor: shape {:.0}x{:.0} pts, hot ({:.0},{:.0}), {} bytes",
+                                s.width_pts, s.height_pts, s.hot_x_pts, s.hot_y_pts, s.png.len()
+                            );
                             last_png = s.png.clone();
                             encode_shape(&s, display_points)
                         })

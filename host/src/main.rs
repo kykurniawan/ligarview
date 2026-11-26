@@ -64,9 +64,12 @@ struct Args {
     /// Test helper: drop the virtual display after N seconds to exercise recovery
     #[arg(long)]
     debug_drop_display_after: Option<u64>,
-    /// Diagnostic: print the current system cursor shape for a few seconds and exit
+    /// Diagnostic: render every standard AppKit cursor to out/cursors and exit
     #[arg(long)]
     cursor_test: bool,
+    /// Diagnostic: print every change of the system cursor for 20 seconds and exit
+    #[arg(long)]
+    cursor_watch: bool,
     /// Test helper: move the cursor around the virtual display so frames change
     #[arg(long)]
     wiggle: bool,
@@ -160,8 +163,21 @@ fn start_capture(
 fn main() -> Result<()> {
     let a = Args::parse();
     if a.cursor_test {
+        std::fs::create_dir_all("out/cursors")?;
+        for (name, shape) in cursor::standard_shapes() {
+            match shape {
+                Some(sh) => {
+                    println!("{name:<20} {:>3.0}x{:<3.0} pts  hot ({:>2.0},{:>2.0})  png {:>5} bytes", sh.width_pts, sh.height_pts, sh.hot_x_pts, sh.hot_y_pts, sh.png.len());
+                    std::fs::write(format!("out/cursors/{name}.png"), &sh.png)?;
+                }
+                None => println!("{name:<20} NO IMAGE"),
+            }
+        }
+        return Ok(());
+    }
+    if a.cursor_watch {
         let mut seed = -1;
-        for _ in 0..80 {
+        for _ in 0..200 {
             let s = cursor::shape_seed();
             if s != seed {
                 seed = s;

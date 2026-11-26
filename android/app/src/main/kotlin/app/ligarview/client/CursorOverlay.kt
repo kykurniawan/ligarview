@@ -21,11 +21,21 @@ class CursorOverlay(private val view: ImageView, private val root: View) : Chore
 
     private var shape: Shape? = null
     private var running = false
+    @Volatile private var visible = false
+    @Volatile private var messages = 0L
+
+    /** One-line summary for diagnosing a cursor that is not shown. */
+    fun debugState(): String {
+        val s = shape
+        return "cursor[in=$inside shape=${s?.let { "%.3fx%.3f".format(it.w, it.h) } ?: "none"} " +
+            "pos=%.3f,%.3f vis=$visible en=$enabled n=$messages]".format(x, y)
+    }
 
     fun setPosition(x: Float, y: Float, inside: Boolean) {
         this.x = x
         this.y = y
         this.inside = inside
+        messages++
     }
 
     fun setShape(shape: Shape) {
@@ -61,10 +71,12 @@ class CursorOverlay(private val view: ImageView, private val root: View) : Chore
         val s = shape
         if (enabled && inside && s != null) {
             view.visibility = View.VISIBLE
+            visible = true
             view.translationX = x * rootW - s.hotX * rootW
             view.translationY = y * rootH - s.hotY * rootH
         } else {
             view.visibility = View.INVISIBLE
+            visible = false
         }
         Choreographer.getInstance().postFrameCallback(this)
     }
