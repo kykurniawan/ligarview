@@ -151,7 +151,7 @@ unsafe fn set_i32(session: *mut c_void, key: CFTypeRef, v: i32, what: &str) -> R
 }
 
 impl Encoder {
-    pub fn new(width: u32, height: u32, fps: u32, bitrate_bps: u32, tx: Sender<Packet>) -> Result<Self> {
+    pub fn new(width: u32, height: u32, fps: u32, bitrate_bps: u32, low_latency_rc: bool, tx: Sender<Packet>) -> Result<Self> {
         unsafe {
             let spec_keys = [kVTVideoEncoderSpecification_EnableLowLatencyRateControl];
             let spec_vals = [kCFBooleanTrue];
@@ -171,7 +171,7 @@ impl Encoder {
                 width as i32,
                 height as i32,
                 K_CM_VIDEO_CODEC_H264,
-                spec,
+                if low_latency_rc { spec } else { std::ptr::null() },
                 std::ptr::null(),
                 std::ptr::null(),
                 output_callback,
@@ -199,7 +199,8 @@ impl Encoder {
             set_i32(session, kVTCompressionPropertyKey_MaxKeyFrameInterval, (fps * 2) as i32, "MaxKeyFrameInterval")?;
             // By default VideoToolbox keeps up to 11 reference frames, which makes hardware
             // decoders buffer ~20+ frames before output (hundreds of ms of lag).
-            set_i32(session, kVTCompressionPropertyKey_ReferenceBufferCount, 1, "ReferenceBufferCount")?;
+            // Only supported together with the low-latency rate control; ignore otherwise.
+            let _ = set_i32(session, kVTCompressionPropertyKey_ReferenceBufferCount, 1, "ReferenceBufferCount");
             check(VTCompressionSessionPrepareToEncodeFrames(session), "PrepareToEncodeFrames")?;
             Ok(enc)
         }

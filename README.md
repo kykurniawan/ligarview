@@ -49,7 +49,8 @@ Early work in progress.
    Defaults to a 1280x800 HiDPI display (2560x1600 real pixels, like a Retina Mac) at 60 fps, 30 Mbps.
    For a 120 Hz panel: `cargo run --release -- --fps 120 --bitrate 60`.
 
-   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats`.
+   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --low-latency-rc --cursor-in-video`.
+   `--stats` prints capture/encode rates and latencies once per second.
 
 2. Android: build and install the app (`cd android && ./gradlew installDebug`).
 3. Connect:
@@ -77,6 +78,11 @@ Video: [`host/src/protocol.rs`](host/src/protocol.rs) (a 12-byte hello, then len
 Cursor: [`host/src/cursor_server.rs`](host/src/cursor_server.rs).
 
 ## Notes
+
+Encoder: the default VideoToolbox mode sustains ~57 fps on a busy 2560x1600 screen with
+~40 ms encode latency. `--low-latency-rc` saves ~10 ms per frame but caps throughput near
+30 fps, which makes dragging windows look choppy. Captured frames are never queued: the
+encoder always takes the newest one and stale frames are dropped.
 
 Latency: VideoToolbox defaults to 11 reference frames, which makes hardware decoders
 buffer 20+ frames before output. The host limits it to 1 (`ReferenceBufferCount`),

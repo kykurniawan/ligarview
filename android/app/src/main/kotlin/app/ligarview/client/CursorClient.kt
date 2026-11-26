@@ -18,6 +18,10 @@ class CursorClient(
     private val overlay: CursorOverlay,
 ) {
     @Volatile private var running = false
+
+    /** True while the cursor connection to the host is up. */
+    @Volatile var connected = false
+        private set
     @Volatile private var socket: Socket? = null
     private var worker: Thread? = null
 
@@ -42,6 +46,7 @@ class CursorClient(
             } catch (_: Exception) {
                 // Host not up yet or connection lost; retry below.
             }
+            connected = false
             if (running) {
                 try {
                     Thread.sleep(1000)
@@ -56,6 +61,7 @@ class CursorClient(
         Socket().also { socket = it }.use { sock ->
             sock.tcpNoDelay = true
             sock.connect(InetSocketAddress(host, port), 3000)
+            connected = true
             val input = DataInputStream(BufferedInputStream(sock.getInputStream(), 16 * 1024))
             while (running) {
                 val length = input.readInt()

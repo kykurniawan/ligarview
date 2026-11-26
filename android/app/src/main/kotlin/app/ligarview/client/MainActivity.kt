@@ -186,7 +186,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                     val fps = (frames - lastFrames) / dt
                     val mbps = (bytes - lastBytes) * 8 / dt / 1e6
                     val hz = display?.refreshRate ?: 0f
-                    val text = "%.0f fps  %.1f Mbps  decode %.1f ms  panel %.0f Hz".format(fps, mbps, c.decodeLatencyMs, hz)
+                    val text = "%.0f fps  %.1f Mbps  decode %.1f ms  panel %.0f Hz  cursor %s".format(
+                        fps, mbps, c.decodeLatencyMs, hz, if (cursorClient?.connected == true) "on" else "OFF",
+                    )
                     stats.text = text
                     android.util.Log.d("Ligarview", text)
                 }

@@ -41,6 +41,10 @@ struct Args {
     /// Keep the cursor inside the video instead of drawing it on the tablet (adds latency)
     #[arg(long)]
     cursor_in_video: bool,
+    /// Use VideoToolbox's low-latency rate control: ~10 ms less encode latency, but it caps
+    /// throughput near 30 fps on busy screens. Off by default (smoother window dragging).
+    #[arg(long)]
+    low_latency_rc: bool,
     /// Print capture/encode rates once per second
     #[arg(long)]
     stats: bool,
@@ -137,7 +141,7 @@ fn main() -> Result<()> {
     let mut capture = None;
     let mut last_err = None;
     for _ in 0..20 {
-        let s = capture::Settings { show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
+        let s = capture::Settings { low_latency_rc: a.low_latency_rc, show_cursor: a.cursor_in_video, width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
         match capture::start(vd.id, s, tx.clone(), info_tx.clone(), key_request.clone()) {
             Ok(c) => { capture = Some(c); break; }
             Err(e) => { last_err = Some(e); std::thread::sleep(Duration::from_millis(500)); }

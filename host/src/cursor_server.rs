@@ -32,24 +32,35 @@ pub fn spawn(port: u16, display: u32, display_points: (u32, u32)) -> anyhow::Res
         let (state, clients) = (state.clone(), clients.clone());
         std::thread::spawn(move || {
             let mut seed = i32::MIN;
+            let mut last_png: Vec<u8> = Vec::new();
+            let mut tick = 0u32;
             loop {
                 if clients.load(Ordering::Relaxed) == 0 {
                     seed = i32::MIN; // resend the shape to the next client
+                    last_png.clear();
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
                 let pos = cursor::position(display);
                 let new_seed = cursor::shape_seed();
-                let shape = (new_seed != seed).then(|| {
-                    seed = new_seed;
-                    cursor::current_shape().map(|s| encode_shape(&s, display_points))
-                });
+                tick = tick.wrapping_add(1);
+                // The seed does not catch every change (e.g. cursors hidden and shown again),
+                // so the image is also re-read every ~100 ms and sent when it differs.
+                let shape = (new_seed != seed || tick % 25 == 0)
+                    .then(|| {
+                        seed = new_seed;
+                        cursor::current_shape().filter(|s| s.png != last_png).map(|s| {
+                            last_png = s.png.clone();
+                            encode_shape(&s, display_points)
+                        })
+                    })
+                    .flatten();
                 let mut st = state.lock().unwrap();
                 if st.pos != Some(pos) {
                     st.pos = Some(pos);
                     st.pos_seq += 1;
                 }
-                if let Some(Some(msg)) = shape {
+                if let Some(msg) = shape {
                     st.shape = Some(msg);
                     st.shape_seq += 1;
                 }

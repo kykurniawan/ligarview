@@ -15,7 +15,7 @@ use screencapturekit::prelude::*;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -53,6 +53,7 @@ extern "C" {
 pub static FRAMES_CAPTURED: AtomicU64 = AtomicU64::new(0);
 
 pub struct Settings {
+    pub low_latency_rc: bool,
     pub show_cursor: bool,
     pub width: u32,
     pub height: u32,
@@ -77,6 +78,10 @@ struct Shared {
     tx: Sender<Packet>,
     info: Sender<String>,
     encoder: Mutex<Option<Encoder>>,
+    /// Newest captured frame not yet encoded. A newer frame replaces (drops) an older one.
+    latest: Mutex<Option<Held>>,
+    wake: Condvar,
+    /// The frame most recently encoded; re-encoded for keyframe requests and idle flushes.
     last: Mutex<Option<Held>>,
     start: Instant,
     key_request: Arc<AtomicBool>,
@@ -92,7 +97,7 @@ impl Shared {
             // Size the encoder from the real frame so it matches what SCK delivers.
             let (w, h) = unsafe { (CVPixelBufferGetWidth(pb) as u32, CVPixelBufferGetHeight(pb) as u32) };
             let _ = self.info.send(format!("first frame: {w}x{h}"));
-            match Encoder::new(w, h, self.settings.fps, self.settings.bitrate_bps, self.tx.clone()) {
+            match Encoder::new(w, h, self.settings.fps, self.settings.bitrate_bps, self.settings.low_latency_rc, self.tx.clone()) {
                 Ok(e) => *guard = Some(e),
                 Err(e) => {
                     let _ = self.info.send(format!("encoder init failed: {e}"));
@@ -129,11 +134,10 @@ impl SCStreamOutputTrait for Handler {
             }
         }
         let ptr = pb.as_ptr() as *const c_void;
-        *self.0.last.lock().unwrap() = Some(Held(unsafe { CFRetain(ptr) }));
+        *self.0.latest.lock().unwrap() = Some(Held(unsafe { CFRetain(ptr) }));
         self.0.last_real_us.store(self.0.start.elapsed().as_micros() as u64, Ordering::SeqCst);
         self.0.repeats.store(0, Ordering::SeqCst);
-        let force = self.0.key_request.swap(false, Ordering::SeqCst);
-        self.0.encode(ptr, force, false);
+        self.0.wake.notify_one();
     }
 }
 
@@ -182,6 +186,8 @@ pub fn start(
         tx,
         info,
         encoder: Mutex::new(None),
+        latest: Mutex::new(None),
+        wake: Condvar::new(),
         last: Mutex::new(None),
         start: Instant::now(),
         key_request,
@@ -193,8 +199,29 @@ pub fn start(
     let _ = stream.add_output_handler(Handler(shared.clone()), SCStreamOutputType::Screen);
     stream.start_capture().map_err(|e| anyhow!("{e:?}"))?;
 
-    // Serves keyframe requests when the screen is static (no new frames arriving).
+    // Encoder thread: always encodes the newest frame, so a slow encoder never builds a queue
+    // of stale frames (and never blocks ScreenCaptureKit's callback).
     let stop = Arc::new(AtomicBool::new(false));
+    {
+        let (shared, stop) = (shared.clone(), stop.clone());
+        std::thread::spawn(move || loop {
+            let held = {
+                let mut slot = shared.latest.lock().unwrap();
+                while slot.is_none() {
+                    if stop.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    slot = shared.wake.wait_timeout(slot, Duration::from_millis(50)).unwrap().0;
+                }
+                slot.take().unwrap()
+            };
+            let force = shared.key_request.swap(false, Ordering::SeqCst);
+            shared.encode(held.0, force, false);
+            *shared.last.lock().unwrap() = Some(held);
+        });
+    }
+
+    // Serves keyframe requests when the screen is static (no new frames arriving).
     {
         let (shared, stop) = (shared.clone(), stop.clone());
         std::thread::spawn(move || {
