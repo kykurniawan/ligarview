@@ -13,14 +13,17 @@ use virtual_display::VirtualDisplay;
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long, default_value_t = 2560)]
+    /// Logical width in points (framebuffer is width x scale pixels)
+    #[arg(long, default_value_t = 1280)]
     width: u32,
-    #[arg(long, default_value_t = 1600)]
+    /// Logical height in points
+    #[arg(long, default_value_t = 800)]
     height: u32,
+    /// Pixel density: 2 = HiDPI (Retina-like), 1 = one pixel per point
+    #[arg(long, default_value_t = 2)]
+    scale: u32,
     #[arg(long, default_value_t = 60)]
     fps: u32,
-    #[arg(long, default_value_t = false)]
-    hidpi: bool,
     /// Bitrate in Mbps
     #[arg(long, default_value_t = 30)]
     bitrate: u32,
@@ -33,6 +36,9 @@ struct Args {
     /// Also write the raw H.264 stream to this file (debugging)
     #[arg(long)]
     out: Option<String>,
+    /// Print capture/encode rates once per second
+    #[arg(long)]
+    stats: bool,
     /// Test helper: move the cursor around the virtual display so frames change
     #[arg(long)]
     wiggle: bool,
@@ -65,8 +71,22 @@ fn wiggle(display: u32, until: Instant) {
 
 fn main() -> Result<()> {
     let a = Args::parse();
-    let vd = VirtualDisplay::create(a.width, a.height, a.fps as f64, a.hidpi)?;
-    println!("virtual display id={}", vd.id);
+    let vd = VirtualDisplay::create(a.width, a.height, a.scale, a.fps as f64)?;
+    let (px_w, px_h) = (a.width * a.scale, a.height * a.scale);
+    println!("virtual display id={}: {}", vd.id, VirtualDisplay::describe(vd.id));
+    // macOS needs a moment before it accepts a mode change on a new display.
+    let mut selected = Err(anyhow::anyhow!("not tried"));
+    for _ in 0..15 {
+        std::thread::sleep(Duration::from_millis(300));
+        selected = VirtualDisplay::select_mode(vd.id, (a.width, a.height), (px_w, px_h));
+        if selected.is_ok() {
+            break;
+        }
+    }
+    match selected {
+        Ok(()) => println!("selected mode: {}", VirtualDisplay::describe(vd.id)),
+        Err(e) => println!("could not select mode: {e}"),
+    }
     for (id, w, h) in VirtualDisplay::active_displays() {
         println!("  display {id}: {w}x{h}{}", if id == vd.id { "  <- ligarview" } else { "" });
     }
@@ -76,30 +96,38 @@ fn main() -> Result<()> {
     let key_request = Arc::new(AtomicBool::new(true));
 
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
-    let hello = protocol::Hello { width: a.width as u16, height: a.height as u16, fps: a.fps as u16 };
+    let hello = protocol::Hello { width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     server::spawn(a.port, hello, rx, key_request.clone(), dump)?;
 
     // The display needs a moment before ScreenCaptureKit lists it.
     let mut capture = None;
     let mut last_err = None;
     for _ in 0..20 {
-        let s = capture::Settings { width: a.width, height: a.height, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
+        let s = capture::Settings { width: px_w, height: px_h, fps: a.fps, bitrate_bps: a.bitrate * 1_000_000 };
         match capture::start(vd.id, s, tx.clone(), info_tx.clone(), key_request.clone()) {
             Ok(c) => { capture = Some(c); break; }
             Err(e) => { last_err = Some(e); std::thread::sleep(Duration::from_millis(500)); }
         }
     }
     let Some(_capture) = capture else { return Err(last_err.unwrap()) };
-    println!("capturing {}x{} @ {} fps, {} Mbps", a.width, a.height, a.fps, a.bitrate);
+    println!("capturing {px_w}x{px_h} @ {} fps, {} Mbps", a.fps, a.bitrate);
 
     let deadline = Instant::now() + Duration::from_secs(if a.seconds == 0 { u64::MAX / 4 } else { a.seconds });
     if a.wiggle {
         let id = vd.id;
         std::thread::spawn(move || wiggle(id, deadline));
     }
+    let mut last = (0u64, 0u64, Instant::now());
     while Instant::now() < deadline {
         if let Ok(m) = info_rx.recv_timeout(Duration::from_millis(200)) {
             println!("{m}");
+        }
+        if a.stats && last.2.elapsed() >= Duration::from_secs(1) {
+            use std::sync::atomic::Ordering::Relaxed;
+            let (c, e) = (capture::FRAMES_CAPTURED.load(Relaxed), encoder::PACKETS_ENCODED.load(Relaxed));
+            let dt = last.2.elapsed().as_secs_f64();
+            println!("captured {:.0} fps, encoded {:.0} fps", (c - last.0) as f64 / dt, (e - last.1) as f64 / dt);
+            last = (c, e, Instant::now());
         }
     }
     Ok(())

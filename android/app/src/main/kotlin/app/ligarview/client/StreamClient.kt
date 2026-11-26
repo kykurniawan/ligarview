@@ -6,6 +6,7 @@ import java.io.DataInputStream
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
@@ -26,6 +27,18 @@ class StreamClient(
     @Volatile
     private var socket: Socket? = null
     private var worker: Thread? = null
+
+    @Volatile
+    private var decoder: VideoDecoder? = null
+
+    /** Total payload bytes received. */
+    val bytesReceived = AtomicLong()
+
+    /** Total frames shown by the decoder (0 when not streaming). */
+    val framesRendered: Long get() = decoder?.framesRendered ?: 0L
+
+    /** Smoothed in-decoder latency in ms (0 when not streaming). */
+    val decodeLatencyMs: Float get() = decoder?.decodeLatencyMs ?: 0f
 
     fun start() {
         running = true
@@ -77,7 +90,8 @@ class StreamClient(
             val height = input.readUnsignedShort()
             val fps = input.readUnsignedShort()
 
-            val decoder = VideoDecoder(surface, width, height)
+            if (fps > 0) surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+            val decoder = VideoDecoder(surface, width, height).also { this.decoder = it }
             try {
                 onStatus("Connected: ${width}x$height @ $fps fps", false)
                 var buffer = ByteArray(512 * 1024)
@@ -89,12 +103,14 @@ class StreamClient(
                     if (length < 0 || length > MAX_FRAME_BYTES) throw IOException("Bad frame size $length")
                     if (buffer.size < length) buffer = ByteArray(length)
                     input.readFully(buffer, 0, length)
+                    bytesReceived.addAndGet(length + 13L)
                     if (decoder.feed(buffer, length, ptsUs) && first) {
                         first = false
                         onStatus("Streaming", true)
                     }
                 }
             } finally {
+                this.decoder = null
                 decoder.release()
             }
         }

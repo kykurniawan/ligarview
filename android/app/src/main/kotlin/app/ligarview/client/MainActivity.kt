@@ -24,6 +24,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     private lateinit var surfaceView: SurfaceView
     private lateinit var panel: LinearLayout
     private lateinit var status: TextView
+    private lateinit var stats: TextView
     private lateinit var hostInput: EditText
 
     private var client: StreamClient? = null
@@ -84,6 +85,26 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             },
         )
 
+        stats = TextView(this).apply {
+            setTextColor(Color.GREEN)
+            setBackgroundColor(0x99000000.toInt())
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 13f
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            visibility = View.GONE
+        }
+        root.addView(
+            stats,
+            FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
+                setMargins(dp(16), dp(16), dp(16), dp(16))
+            },
+        )
+        // Long-press the picture to toggle the statistics overlay.
+        surfaceView.setOnLongClickListener {
+            stats.visibility = if (stats.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            true
+        }
+
         panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xEE111111.toInt())
@@ -114,6 +135,31 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             FrameLayout.LayoutParams(dp(480), WRAP_CONTENT, Gravity.CENTER),
         )
         setContentView(root)
+    }
+
+    private var lastFrames = 0L
+    private var lastBytes = 0L
+    private var lastTime = 0L
+
+    private val statsTick = object : Runnable {
+        override fun run() {
+            val c = client
+            if (c != null) {
+                val now = System.nanoTime()
+                val frames = c.framesRendered
+                val bytes = c.bytesReceived.get()
+                val dt = (now - lastTime) / 1e9
+                if (lastTime != 0L && dt > 0 && frames >= lastFrames) {
+                    val fps = (frames - lastFrames) / dt
+                    val mbps = (bytes - lastBytes) * 8 / dt / 1e6
+                    val text = "%.0f fps  %.1f Mbps  decode %.1f ms".format(fps, mbps, c.decodeLatencyMs)
+                    stats.text = text
+                    android.util.Log.d("Ligarview", text)
+                }
+                lastFrames = frames; lastBytes = bytes; lastTime = now
+            }
+            surfaceView.postDelayed(this, 1000)
+        }
     }
 
     private fun label(text: String, size: Float, color: Int, top: Int = 0) = TextView(this).apply {
@@ -172,6 +218,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceReady = true
+        surfaceView.removeCallbacks(statsTick)
+        surfaceView.post(statsTick)
         startClient()
     }
 

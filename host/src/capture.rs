@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use screencapturekit::cm::CMSampleBufferExt;
 use screencapturekit::prelude::*;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -25,6 +25,9 @@ extern "C" {
     fn CVPixelBufferGetWidth(pb: *const c_void) -> usize;
     fn CVPixelBufferGetHeight(pb: *const c_void) -> usize;
 }
+
+/// Frames delivered by ScreenCaptureKit (for diagnostics).
+pub static FRAMES_CAPTURED: AtomicU64 = AtomicU64::new(0);
 
 pub struct Settings {
     pub width: u32,
@@ -83,6 +86,7 @@ impl SCStreamOutputTrait for Handler {
             return;
         }
         let Some(pb) = sample.pixel_buffer() else { return };
+        FRAMES_CAPTURED.fetch_add(1, Ordering::Relaxed);
         let ptr = pb.as_ptr() as *const c_void;
         *self.0.last.lock().unwrap() = Some(Held(unsafe { CFRetain(ptr) }));
         let force = self.0.key_request.swap(false, Ordering::SeqCst);

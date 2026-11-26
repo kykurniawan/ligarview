@@ -73,6 +73,7 @@ extern "C" {
     static kVTCompressionPropertyKey_AverageBitRate: CFTypeRef;
     static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFTypeRef;
     static kVTCompressionPropertyKey_ExpectedFrameRate: CFTypeRef;
+    static kVTCompressionPropertyKey_ReferenceBufferCount: CFTypeRef;
     static kVTProfileLevel_H264_High_AutoLevel: CFTypeRef;
     static kVTVideoEncoderSpecification_EnableLowLatencyRateControl: CFTypeRef;
     static kVTEncodeFrameOptionKey_ForceKeyFrame: CFTypeRef;
@@ -102,6 +103,9 @@ extern "C" {
     ) -> OSStatus;
     fn VTCompressionSessionInvalidate(session: *mut c_void);
 }
+
+/// Packets produced by the encoder (for diagnostics).
+pub static PACKETS_ENCODED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub struct Packet {
     pub keyframe: bool,
@@ -181,6 +185,9 @@ impl Encoder {
             set_i32(session, kVTCompressionPropertyKey_AverageBitRate, bitrate_bps as i32, "AverageBitRate")?;
             set_i32(session, kVTCompressionPropertyKey_ExpectedFrameRate, fps as i32, "ExpectedFrameRate")?;
             set_i32(session, kVTCompressionPropertyKey_MaxKeyFrameInterval, (fps * 2) as i32, "MaxKeyFrameInterval")?;
+            // By default VideoToolbox keeps up to 11 reference frames, which makes hardware
+            // decoders buffer ~20+ frames before output (hundreds of ms of lag).
+            set_i32(session, kVTCompressionPropertyKey_ReferenceBufferCount, 1, "ReferenceBufferCount")?;
             check(VTCompressionSessionPrepareToEncodeFrames(session), "PrepareToEncodeFrames")?;
             Ok(enc)
         }
@@ -261,7 +268,8 @@ extern "C" fn output_callback(
                 let (mut p, mut size, mut count, mut nal) = (std::ptr::null(), 0usize, 0usize, 0i32);
                 if CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, i, &mut p, &mut size, &mut count, &mut nal) == 0 {
                     out.extend_from_slice(&[0, 0, 0, 1]);
-                    out.extend_from_slice(std::slice::from_raw_parts(p, size));
+                    let nal = std::slice::from_raw_parts(p, size);
+                    out.extend_from_slice(nal);
                 }
             }
         }
@@ -285,6 +293,7 @@ extern "C" fn output_callback(
         }
         let pts = CMSampleBufferGetPresentationTimeStamp(sb);
         let pts_us = if pts.timescale > 0 { pts.value * 1_000_000 / pts.timescale as i64 } else { 0 };
+        PACKETS_ENCODED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let _ = tx.send(Packet { keyframe, pts_us, data: out });
     }
 }
