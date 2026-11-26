@@ -45,6 +45,7 @@ extern "C" {
 extern "C" {
     static kCMSampleAttachmentKey_NotSync: CFTypeRef;
     fn CMSampleBufferGetSampleAttachmentsArray(sb: *const c_void, create: u8) -> CFTypeRef;
+    fn CMSampleBufferGetPresentationTimeStamp(sb: *const c_void) -> CMTime;
     fn CMSampleBufferGetFormatDescription(sb: *const c_void) -> *const c_void;
     fn CMSampleBufferGetDataBuffer(sb: *const c_void) -> *const c_void;
     fn CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
@@ -282,6 +283,8 @@ extern "C" fn output_callback(
             out.extend_from_slice(&data[i..i + n]);
             i += n;
         }
-        let _ = tx.send(Packet { keyframe, pts_us: 0, data: out });
+        let pts = CMSampleBufferGetPresentationTimeStamp(sb);
+        let pts_us = if pts.timescale > 0 { pts.value * 1_000_000 / pts.timescale as i64 } else { 0 };
+        let _ = tx.send(Packet { keyframe, pts_us, data: out });
     }
 }

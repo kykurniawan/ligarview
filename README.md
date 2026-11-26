@@ -26,22 +26,40 @@ Early work in progress.
 
 - [x] Host: virtual display
 - [x] Host: capture + hardware H.264 encode
-- [ ] Transport (TCP, Wi-Fi + USB)
-- [ ] Android client
+- [x] Transport (TCP, works over Wi-Fi and USB via `adb reverse`)
+- [x] Android client (MediaCodec low-latency decode, fullscreen)
 - [ ] Latency and quality tuning
 
 ## Requirements
 
 - macOS 14+ (developed on macOS 15), Apple Silicon
 - Rust (stable)
+- Android 11+ (API 30), Android SDK + JDK 17+ to build the app
 - Screen Recording permission for the host app
 
-## Try the host
+## Usage
 
-```bash
-cd host
-cargo run --release -- --seconds 8 --wiggle --out out/test.h264
-```
+1. Mac: start the host (creates the extra display and listens on port 7878).
+
+   ```bash
+   cd host
+   cargo run --release
+   ```
+
+   Options: `--width --height --fps --bitrate <Mbps> --port --hidpi`.
+
+2. Android: build and install the app (`cd android && ./gradlew installDebug`).
+3. Connect:
+   - **USB**: enable USB debugging, run `adb reverse tcp:7878 tcp:7878`, open the app and connect to `127.0.0.1:7878`.
+   - **Wi-Fi**: open the app and connect to `<mac-ip>:7878` (same network, 5 GHz recommended).
+
+The app reconnects automatically and remembers the last address. Back returns to the connect screen.
+
+Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the stream to a file.
+
+## Protocol
+
+See [`host/src/protocol.rs`](host/src/protocol.rs): a 12-byte hello, then length-prefixed Annex-B H.264 frames.
 
 ## Notes
 
