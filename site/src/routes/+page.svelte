@@ -27,7 +27,7 @@
     <h1>Your Android tablet, as a second Mac display.</h1>
     <p class="lead">Ligarview brings Sidecar-style extended displays to Android. Connect a tablet over USB or Wi-Fi and use it as a genuine second monitor, powered by a Rust host and a native Kotlin app.</p>
     <div class="cta">
-      <a class="primary" href="/docs/install">Get started</a>
+      <a class="primary" href="/download">Download</a>
       <a class="secondary" href="https://github.com/kykurniawan/ligarview">View on GitHub</a>
     </div>
     <div class="stage"><div class="glow"></div><div class="panel"><Stage /></div></div>
@@ -81,8 +81,8 @@
     <h2>Get started</h2>
     <p>Download the Mac app and the Android app and be up and running in a couple of minutes. No build tools needed.</p>
     <div class="cta">
-      <a class="primary" href="/docs/install">Read the install guide</a>
-      <a class="secondary" href="https://github.com/kykurniawan/ligarview/releases/latest">Latest release</a>
+      <a class="primary" href="/download">Download</a>
+      <a class="secondary" href="/docs/install">Read the install guide</a>
     </div>
   </section>
 </main>

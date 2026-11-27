@@ -1,11 +1,11 @@
 # Install
 
-Download both apps from the [latest release](https://github.com/kykurniawan/ligarview/releases/latest):
+Download both apps from the [download page](/download):
 
-- `Ligarview-<version>-macos-arm64.dmg` for the Mac (Apple Silicon, macOS 14 or newer)
-- `Ligarview-<version>.apk` for the Android tablet (Android 11 or newer)
+- `Ligarview-macos-arm64.dmg` for the Mac (Apple Silicon, macOS 14 or newer)
+- `Ligarview-android.apk` for the Android tablet (Android 11 or newer)
 
-The builds are not signed with an Apple Developer ID and are not notarized, and the APK is signed with the project's own key rather than distributed through Google Play. Both therefore show a one-time warning, described below. `SHA256SUMS` in the release lets you check your downloads.
+The builds are not signed with an Apple Developer ID and are not notarized, and the APK is signed with the project's own key rather than distributed through Google Play. Both therefore show a one-time warning, described below. `SHA256SUMS` in each [release](https://github.com/kykurniawan/ligarview/releases) lets you check your downloads.
 
 ## The Mac app
 
@@ -44,4 +44,4 @@ cd host
 cargo run --release
 ```
 
-**Android app.** Needs the Android SDK and JDK 17 or newer. `tools/apk.sh` builds `dist/Ligarview-<version>.apk`, signed with the debug key unless the `LIGARVIEW_KEYSTORE*` variables point at a release key. To install straight onto a tablet with USB debugging on, run `./gradlew installDebug` in `android/`.
+**Android app.** Needs the Android SDK and JDK 17 or newer. `tools/apk.sh` builds `dist/Ligarview-android.apk`, signed with the debug key unless the `LIGARVIEW_KEYSTORE*` variables point at a release key. To install straight onto a tablet with USB debugging on, run `./gradlew installDebug` in `android/`.

@@ -36,7 +36,8 @@ Early work in progress.
 
 ## Download
 
-Get `Ligarview-<version>-macos-arm64.dmg` and `Ligarview-<version>.apk` from the
+Get `Ligarview-macos-arm64.dmg` and `Ligarview-android.apk` from the
+[download page](https://ligarview.rizkykurniawan.id/download) or the
 [latest release](https://github.com/kykurniawan/ligarview/releases/latest). The builds are unsigned (not
 notarized by Apple), so macOS asks you to confirm the first launch; see the
 [install guide](https://ligarview.rizkykurniawan.id/docs/install). The sections below are for building from source.

@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   let { children } = $props();
   const onDocs = $derived(page.url.pathname.startsWith('/docs'));
+  const onDownload = $derived(page.url.pathname.startsWith('/download'));
 </script>
 
 <svelte:head>
@@ -14,6 +15,7 @@
   <div class="bar">
     <a class="brand" href="/"><img src="/logo.png" alt="" width="28" height="28" /> Ligarview</a>
     <nav aria-label="Main">
+      <a href="/download" aria-current={onDownload ? 'page' : undefined}>Download</a>
       <a href="/docs" aria-current={onDocs ? 'page' : undefined}>Docs</a>
       <a href="https://github.com/kykurniawan/ligarview">GitHub</a>
     </nav>
