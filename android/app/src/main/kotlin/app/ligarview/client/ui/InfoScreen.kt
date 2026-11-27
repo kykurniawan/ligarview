@@ -1,5 +1,8 @@
 package app.ligarview.client.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -110,8 +113,13 @@ private fun InfoScreen(state: UiState, actions: Actions, versionName: String) {
 
 @Composable
 private fun LeftColumn(state: UiState, actions: Actions) {
-    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = Palette.Text)
-    Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Image(painterResource(R.drawable.logo_mark), contentDescription = null, modifier = Modifier.size(48.dp))
+        Column {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, color = Palette.Text)
+            Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
+        }
+    }
     Spacer(Modifier.height(36.dp))
     Status(state, actions)
     Spacer(Modifier.height(28.dp))

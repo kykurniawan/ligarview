@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" width="120" alt="Ligarview"></p>
+
 # Ligarview
 
 Use an Android tablet as a real **extended** second display for your Mac, over Wi-Fi or USB.
