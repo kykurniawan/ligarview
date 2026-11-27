@@ -1,5 +1,7 @@
 # Connect
 
+The Mac window has a **Connection** setting, **USB cable** or **Wi-Fi**. Only that transport runs: with USB the Mac does not listen on the network and shows no pairing controls, with Wi-Fi it announces itself, listens and pairs by code. Pick the one you use; switching restarts the stream for a moment.
+
 ## USB (recommended)
 
 Plug and play. Nothing to enable on the tablet: no USB debugging, no developer mode, no adb.
@@ -14,9 +16,10 @@ Measured on a Galaxy Tab S9 over USB 2.0: 0.25 ms round trip and 215 Mbit/s. A U
 
 Wi-Fi is paired once, from the Mac. After that the tablet reconnects by itself.
 
-1. Put both devices on the same network (5 GHz recommended) and unplug the USB cable. With a cable attached the tablet prefers USB.
-2. Open the Android app and choose the **Wi-Fi** tab. It shows a six-digit code and announces the tablet to the Mac.
-3. In the Ligarview window on the Mac, choose the tablet from the list, enter the code and press **Connect**.
+1. Set **Connection** to **Wi-Fi** in the Ligarview window.
+2. Put both devices on the same network (5 GHz recommended) and unplug the USB cable. With a cable attached the tablet prefers USB, and its Wi-Fi tab says so.
+3. Open the Android app and choose the **Wi-Fi** tab. It shows a six-digit code and announces the tablet to the Mac.
+4. In the Ligarview window on the Mac, choose the tablet from the list, enter the code and press **Connect**.
 
 The tablet remembers the pairing and connects whenever the Mac is sharing. Both ports **7878** (video) and **7879** (cursor) must be reachable, and the network must allow Bonjour (mDNS) so the two devices can find each other.
 
@@ -24,10 +27,16 @@ The Mac manages the connection. **Stop sharing** disconnects the tablet and refu
 
 ## Developer mode (adb)
 
-For development only. Start the host with `--adb`: it sets up `adb reverse` tunnels, and you connect the app to `127.0.0.1:7878`. This needs USB debugging and replaces the USB accessory transport, because the two fight over the device.
+For development only. (There is no address field in the app; this is the one way to point it at an address.) Start the host with `--adb`: it sets up `adb reverse` tunnels, and you start the app with `adb shell am start -n app.ligarview.client/.MainActivity --es host 127.0.0.1:7878`. This needs USB debugging and replaces the USB accessory transport, because the two fight over the device.
 
 ```bash
 host/target/release/ligarview-host --adb
+```
+
+To see a statistics overlay (fps, bitrate, decoder latency) in full screen, start the app with `--ez stats true` instead of, or as well as, the address extra:
+
+```bash
+adb shell am start -n app.ligarview.client/.MainActivity --ez stats true
 ```
 
 ## Flags

@@ -1,0 +1,72 @@
+# Pen, touch and keyboard
+
+The tablet is more than a monitor: with the S Pen, your fingers and its keyboard you can control the Mac from it. Everything on this page is **off until you switch it on** in the Mac window, one switch at a time.
+
+<img src="/tablet-fullscreen.jpg" alt="The tablet in full screen with the sidebar open" width="1600" height="1000" />
+
+## Turn it on
+
+The Mac window has three checkboxes:
+
+- **Allow pen control from the tablet.** The pointer, clicks and drags, and the sidebar's modifier keys, Esc, Undo, Dock and menu bar.
+- **Allow finger scrolling from the tablet.** Scrolling and zoom.
+- **Allow typing from the tablet.** The on-screen keyboard.
+
+The first time you turn one on, macOS asks for the **Accessibility** permission. Allow **Ligarview** in **System Settings → Privacy & Security → Accessibility**. Until you do, nothing from the tablet reaches the Mac, and the window says so.
+
+Turning a checkbox off takes effect at once and releases any key the tablet was holding. The Mac also tells the tablet what it allows: a sidebar button that the Mac does not allow is dimmed, and tapping it says which switch to turn on.
+
+## The pen
+
+Use the full-screen picture like a screen of the Mac.
+
+- **Hover** the pen above the screen and the pointer follows, without clicking.
+- **Touch** to click, and drag to drag. Quick taps in the same place are double and triple clicks.
+- Press the pen's **side button** while touching for a right-click.
+- Pressure is sent along with the click, for apps that read it from mouse events. There is no tilt and the pen does not appear to the Mac as a graphics tablet.
+
+## Fingers
+
+Fingers scroll and zoom. They never click, so a resting hand cannot trigger anything: the pen does the pointing.
+
+- **Scroll** with one or two fingers, in any direction. The content follows your finger, like on a phone, and keeps gliding after a flick. Touch the screen to stop it.
+- **Zoom** by moving two fingers apart or together. The Mac receives this as Ctrl and scroll, which browsers based on Chromium, Figma, Excalidraw and many map and drawing apps read as zoom. Safari and Preview do not.
+- After a pinch, lift both fingers before scrolling again.
+
+## The sidebar
+
+Tap the small tab on the left edge of the full-screen picture to open the sidebar.
+
+| Button | What it does |
+|---|---|
+| **aA** | Shows or hides the on-screen keyboard. |
+| **⌘ ⇧ ⌃ ⌥** | Tap to hold the key for the next pen stroke or key press. Double-tap to keep it held, tap again to let go. |
+| **esc** | Escape. |
+| **↶ ↷** | Undo (⌘Z) and Redo (⇧⌘Z). |
+| **dock** | Pushes the pointer against the bottom edge of the tablet's display, which brings up an auto-hidden Dock there. Tap again to send the pointer back. |
+| **menu** | The same for the menu bar at the top edge. |
+| **×** | Disconnects and returns to the connect screen. |
+
+Dock and menu work best with **Automatically hide and show the Dock** turned on in System Settings.
+
+## Typing
+
+Tap **aA** and the tablet's keyboard slides up over the picture. What you type goes to the app in front on the Mac: letters, numbers and symbols, plus Backspace, Return, Tab, Delete and the arrow keys. The sidebar moves above the keyboard so the modifier keys stay within reach: tap **⌘**, then type **a**, and everything is selected.
+
+The tablet can only send these things. It cannot press arbitrary keys or system shortcuts on the Mac.
+
+## Extended or mirrored
+
+All of this works in both display modes. When the Mac is set to mirror its main display, the pen and fingers control the main display.
+
+## What is not there yet
+
+- Pen tilt, and the pen as a real graphics tablet.
+- Tapping with a finger to click, and three-finger gestures.
+- Zoom in apps that only understand the trackpad's pinch gesture.
+
+## Safety
+
+- Everything is **off by default**, and the Mac decides. The tablet cannot turn a switch on.
+- What the tablet sends is checked on the Mac: coordinates are clamped to the display, keys are limited to the few above, and text is capped in length.
+- Over Wi-Fi the connection is not encrypted and the pairing code is a convenience, not strong authentication. Turn the switches on only on a network you trust, or use the USB cable.

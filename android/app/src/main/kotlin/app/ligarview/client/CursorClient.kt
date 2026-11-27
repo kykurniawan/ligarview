@@ -4,6 +4,9 @@ import android.graphics.BitmapFactory
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -20,7 +23,41 @@ class CursorClient(
     @Volatile var connected = false
         private set
     @Volatile private var opened: Opened? = null
+
+    /** What the Mac allows (bits 1 pen and sidebar, 2 finger scrolling, 4 typing); -1 until it says. */
+    @Volatile var caps = -1
+        private set
+
+    /** Called (on the reader thread) when the Mac announces what it allows. */
+    @Volatile var onCaps: ((Int) -> Unit)? = null
     private var worker: Thread? = null
+
+    /** Input goes out on its own thread: a slow or dead link must never block the UI. */
+    private val sender = Executors.newSingleThreadExecutor { r -> Thread(r, "input-sender").apply { isDaemon = true } }
+    private val queued = AtomicInteger(0)
+
+    /** True while the host can receive input from this connection. */
+    val canSendInput: Boolean get() = connected && opened?.send != null
+
+    /** Sends one input message body to the host. Dropped when the link is backed up or down. */
+    fun sendInput(body: ByteArray) {
+        val send = opened?.send ?: return
+        if (!connected || queued.get() > MAX_QUEUED_INPUT) return
+        queued.incrementAndGet()
+        try {
+            sender.execute {
+                try {
+                    send(body)
+                } catch (_: Exception) {
+                    // The read side notices a dead link and reconnects.
+                } finally {
+                    queued.decrementAndGet()
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            queued.decrementAndGet()
+        }
+    }
 
     fun start() {
         running = true
@@ -34,6 +71,7 @@ class CursorClient(
         } catch (_: IOException) {
         }
         worker?.join(1000)
+        sender.shutdownNow()
     }
 
     private fun loop() {
@@ -67,6 +105,11 @@ class CursorClient(
                         val y = input.readFloat()
                         overlay.setPosition(x, y, input.readUnsignedByte() != 0)
                     }
+                    TYPE_CAPS -> {
+                        val bits = input.readUnsignedByte()
+                        caps = bits
+                        onCaps?.invoke(bits)
+                    }
                     TYPE_SHAPE -> {
                         val w = input.readFloat()
                         val h = input.readFloat()
@@ -86,6 +129,8 @@ class CursorClient(
     private companion object {
         const val TYPE_POSITION = 1
         const val TYPE_SHAPE = 2
+        const val TYPE_CAPS = 3
         const val MAX_MESSAGE_BYTES = 1 shl 20
+        const val MAX_QUEUED_INPUT = 64
     }
 }

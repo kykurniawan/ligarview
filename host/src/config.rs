@@ -15,11 +15,22 @@ pub struct Config {
     pub code: u32,
     /// Name of the paired tablet, for display.
     pub tablet: String,
+    /// Whether the tablet's pen may move the pointer and click on the Mac.
+    pub control: bool,
+    /// Whether the tablet's fingers may scroll the Mac.
+    pub finger: bool,
+    /// How the tablet connects: over Wi-Fi (pairing code) or over the USB cable. Only that
+    /// transport is started; the other stays off.
+    pub wifi: bool,
+    /// Whether the tablet may type on the Mac.
+    pub keyboard: bool,
+    /// Show the Mac's main display on the tablet instead of adding an extra display.
+    pub mirror: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new() }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false, finger: false, wifi: false, keyboard: false, mirror: false }
     }
 }
 
@@ -29,8 +40,15 @@ fn path() -> Option<PathBuf> {
 
 impl Config {
     pub fn load() -> Self {
+        match path().and_then(|p| std::fs::read_to_string(p).ok()) {
+            Some(text) => Self::parse(&text),
+            None => Self::default(),
+        }
+    }
+
+    fn parse(text: &str) -> Self {
         let mut c = Self::default();
-        let Some(text) = path().and_then(|p| std::fs::read_to_string(p).ok()) else { return c };
+        let mut chose_connection = false;
         for line in text.lines() {
             let Some((k, v)) = line.split_once('=') else { continue };
             match (k.trim(), v.trim()) {
@@ -41,8 +59,20 @@ impl Config {
                 ("sharing", v) => c.sharing = v != "off",
                 ("code", v) => c.code = v.parse().unwrap_or(0),
                 ("tablet", v) => c.tablet = v.to_string(),
+                ("control", v) => c.control = v == "on",
+                ("finger", v) => c.finger = v == "on",
+                ("keyboard", v) => c.keyboard = v == "on",
+                ("display", v) => c.mirror = v == "mirror",
+                ("connection", v) => {
+                    c.wifi = v == "wifi";
+                    chose_connection = true;
+                }
                 _ => {}
             }
+        }
+        // Settings saved before this option existed: a tablet that was paired keeps using Wi-Fi.
+        if !chose_connection {
+            c.wifi = c.code != 0;
         }
         c
     }
@@ -53,15 +83,58 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\nfinger={}\nconnection={}\nkeyboard={}\ndisplay={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
             if self.hevc { "hevc" } else { "h264" },
             if self.sharing { "on" } else { "off" },
             self.code,
-            self.tablet.replace('\n', " ")
+            self.tablet.replace('\n', " "),
+            if self.control { "on" } else { "off" },
+            if self.finger { "on" } else { "off" },
+            if self.wifi { "wifi" } else { "usb" },
+            if self.keyboard { "on" } else { "off" },
+            if self.mirror { "mirror" } else { "extend" }
         );
         let _ = std::fs::write(p, text);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_installs_use_usb() {
+        assert!(!Config::parse("").wifi);
+        assert!(!Config::parse("fps=60\n").wifi);
+    }
+
+    #[test]
+    fn a_paired_tablet_from_before_keeps_wifi() {
+        assert!(Config::parse("code=123456\ntablet=Tab\n").wifi);
+    }
+
+    #[test]
+    fn an_explicit_choice_wins() {
+        assert!(!Config::parse("code=123456\nconnection=usb\n").wifi);
+        assert!(Config::parse("connection=wifi\n").wifi);
+    }
+
+    #[test]
+    fn display_mode_defaults_to_extend() {
+        assert!(!Config::parse("").mirror);
+        assert!(Config::parse("display=mirror\n").mirror);
+        assert!(!Config::parse("display=extend\n").mirror);
+    }
+
+    #[test]
+    fn round_trips() {
+        let mut c = Config::default();
+        c.wifi = true;
+        c.code = 42;
+        let text = format!("connection={}\ncode={}\n", if c.wifi { "wifi" } else { "usb" }, c.code);
+        assert_eq!(Config::parse(&text).wifi, true);
     }
 }

@@ -14,6 +14,8 @@ import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -68,6 +70,8 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** Identifies the running client; status reports from a stopped one are ignored. */
     private var clientToken: Any? = null
     private var cursorClient: CursorClient? = null
+    private var sidebar: Sidebar? = null
+    private lateinit var keyboardInput: KeyboardInput
     private lateinit var usbManager: UsbManager
     private var usbLink: UsbLink? = null
     private lateinit var permissionIntent: PendingIntent
@@ -125,10 +129,15 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         onBackPressedDispatcher.addCallback(this, backCallback)
+        // The keyboard overlays the picture instead of squeezing it.
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
 
-        val saved = prefs().getString(KEY_TARGET, null)
+        // Older versions let the user type an address and saved it; it is no longer used.
+        prefs().edit().remove(KEY_TARGET).apply()
         val secret = prefs().getString(KEY_SECRET, "").orEmpty()
-        state = UiState(initialHost = saved.orEmpty(), initialCode = newCode(), startOnWifiTab = saved != null || secret.length == CODE_LENGTH)
+        state = UiState(initialCode = newCode(), startOnWifiTab = secret.length == CODE_LENGTH)
+        intent.getStringExtra(EXTRA_HOST)?.let { state.hostText = it.trim() }
+        statsForDevelopers = intent.getBooleanExtra(EXTRA_STATS, false)
         discovery = NsdDiscovery(this, ::onMacFound)
         pairingServer = PairingServer(this, { state.pairingCode }, ::onPaired)
         buildUi()
@@ -149,7 +158,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         // Connect automatically: over USB when the Mac has switched the tablet into accessory
         // mode, otherwise to the last used host.
-        if (hasWifiPlan() || usbManager.accessoryList?.isNotEmpty() == true) {
+        if (hasWifiPlan() || state.hostText.isNotEmpty() || usbManager.accessoryList?.isNotEmpty() == true) {
             wantConnection = true
             state.phase = LinkPhase.Connecting
         }
@@ -158,6 +167,20 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Developer routes: `am start ... --ez stats true` shows the statistics overlay in full screen,
+        // `--es host 127.0.0.1:7878` connects to that address (adb reverse).
+        if (intent.hasExtra(EXTRA_STATS)) {
+            statsForDevelopers = intent.getBooleanExtra(EXTRA_STATS, false)
+            setStatsVisible(statsForDevelopers && state.fullscreen)
+        }
+        intent.getStringExtra(EXTRA_HOST)?.let {
+            state.hostText = it.trim()
+            userStopped = false
+            state.everConnected = false
+            wantConnection = true
+            startClient()
+            return
+        }
         if (intent.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) {
             wantConnection = true
             startClient()
@@ -237,7 +260,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         cursorOverlay = CursorOverlay(cursorView, root)
 
         val actions = Actions(
-            connect = ::connect,
             connectUsb = {
                 userStopped = false
                 state.everConnected = false
@@ -286,12 +308,39 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         )
         statsMirror = mirror
         cursorOverlay.mirror = mirror
-        // Long-press the full-screen picture to toggle the statistics overlay.
-        surfaceView.setOnLongClickListener {
-            if (!state.fullscreen) return@setOnLongClickListener false
-            setStatsVisible(stats.visibility != View.VISIBLE)
-            true
+        // The S Pen controls the Mac's pointer in full screen (the host must allow it).
+        val sidebar = Sidebar(
+            this,
+            send = { cursorClient?.sendInput(it) },
+            onKeyboard = ::toggleKeyboard,
+            onDisconnect = ::disconnect,
+        )
+        this.sidebar = sidebar
+        root.addView(sidebar.container, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        // The keyboard overlays the picture; the sidebar moves up out of its way and scrolls if needed.
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            sidebar.container.setPadding(0, 0, 0, insets.getInsets(WindowInsets.Type.ime()).bottom)
+            v.onApplyWindowInsets(insets)
         }
+        keyboardInput = KeyboardInput(
+            this,
+            send = { cursorClient?.sendInput(it) },
+            sidebarMask = sidebar::mask,
+            keyDone = sidebar::strokeEnded,
+        )
+        root.addView(keyboardInput.view, FrameLayout.LayoutParams(1, 1))
+        val pen = PenInput(
+            enabled = { state.fullscreen && cursorClient?.canSendInput == true },
+            send = { cursorClient?.sendInput(it) },
+            onStrokeEnd = sidebar::strokeEnded,
+        )
+        val fingers = FingerScroll(
+            enabled = { state.fullscreen && cursorClient?.canSendInput == true },
+            send = { cursorClient?.sendInput(it) },
+            slopPx = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat(),
+        )
+        surfaceView.setOnTouchListener { v, e -> pen.onTouch(v, e) || fingers.onTouch(v, e) }
+        surfaceView.setOnHoverListener { v, e -> pen.onHover(v, e) }
         // Rotating the tablet changes the root size: refit the full-screen picture (the preview is
         // re-placed by the Compose screen, which reports its new bounds).
         root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
@@ -326,6 +375,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
                 lastFrames = frames; lastBytes = bytes; lastTime = now
             }
+            sidebar?.setAvailable(state.fullscreen && cursorClient?.canSendInput == true)
             surfaceView.postDelayed(this, 1000)
         }
     }
@@ -405,6 +455,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         state.fullscreen = value
         backCallback.isEnabled = value
         if (value) {
+            setStatsVisible(statsForDevelopers)
             animateSurfaceTo(fitRect(), 0f)
         } else {
             setStatsVisible(false)
@@ -424,6 +475,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         setStatsVisible(false)
     }
 
+    /** Set from the launch intent (`--ez stats true`): the statistics overlay is shown in full screen. */
+    private var statsForDevelopers = false
+
     private fun setStatsVisible(visible: Boolean) {
         val v = if (visible) View.VISIBLE else View.GONE
         stats.visibility = v
@@ -431,6 +485,27 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /** Shows or hides the on-screen keyboard; what is typed goes to the Mac. */
+    private fun toggleKeyboard() {
+        val controller = window.insetsController ?: return
+        val shown = root.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+        if (shown) {
+            controller.hide(WindowInsets.Type.ime())
+        } else {
+            keyboardInput.view.requestFocus()
+            controller.show(WindowInsets.Type.ime())
+        }
+    }
+
+    /** A hardware keyboard attached to the tablet types on the Mac while the picture is full screen. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val usable = state.fullscreen && cursorClient?.canSendInput == true &&
+            event.keyCode != KeyEvent.KEYCODE_BACK && event.device?.isVirtual == false &&
+            event.isFromSource(InputDevice.SOURCE_KEYBOARD)
+        if (usable && keyboardInput.hardwareKey(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
 
     private fun prefs() = getSharedPreferences("ligarview", Context.MODE_PRIVATE)
 
@@ -444,7 +519,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun secret() = prefs().getString(KEY_SECRET, "").orEmpty()
 
-    private fun hasWifiPlan() = prefs().getString(KEY_TARGET, null) != null || secret().length == CODE_LENGTH
+    private fun hasWifiPlan() = secret().length == CODE_LENGTH
 
     private fun newCode() = (100_000 + java.security.SecureRandom().nextInt(900_000)).toString()
 
@@ -477,15 +552,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         } else if (state.transport != Transport.Usb && activeTarget != "${mac.host}:${mac.port}") {
             startClient()
         }
-    }
-
-    private fun connect() {
-        val manual = state.hostText.trim()
-        prefs().edit().apply { if (manual.isEmpty()) remove(KEY_TARGET) else putString(KEY_TARGET, manual) }.apply()
-        userStopped = false
-        state.everConnected = false
-        wantConnection = true
-        startClient()
     }
 
     /** The USB accessory link, opened on demand. Null when none is attached or permission is pending. */
@@ -548,7 +614,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             onStatus = { status, detail -> onLinkStatus(token, status, detail) },
             onSize = ::onVideoSize,
         ).also { it.start() }
-        cursorClient = CursorClient(cursorSource, cursorOverlay).also { it.start() }
+        cursorClient = CursorClient(cursorSource, cursorOverlay).also {
+            it.onCaps = { bits -> runOnUiThread { sidebar?.setCaps(bits) } }
+            it.start()
+        }
         cursorOverlay.enabled = true
     }
 
@@ -647,7 +716,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         const val PREVIEW_RADIUS_DP = 12
         const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
+        /** Saved by older versions; only cleared now. */
         const val KEY_TARGET = "manual_address"
+        const val EXTRA_HOST = "host"
+        const val EXTRA_STATS = "stats"
         const val KEY_SECRET = "pairing_secret"
         const val CODE_LENGTH = 6
         const val DEFAULT_PORT = 7878

@@ -1,6 +1,7 @@
 //! Cursor channel (TCP port + 1, or the USB pipe's cursor channel). Messages (big-endian), each prefixed by
 //! `len u32` (type byte + body):
 //!   1 Position: x f32 | y f32 | inside u8        (x, y in 0..1 of the display)
+//!   3 Caps:     bits u8      (what the tablet may do: 1 pen and sidebar, 2 finger scrolling, 4 typing)
 //!   2 Shape:    width f32 | height f32 | hot_x f32 | hot_y f32 | PNG bytes
 //!               (sizes as a fraction of the display width/height)
 
@@ -25,6 +26,9 @@ struct State {
     /// Ready-to-send Shape message (without the length prefix).
     shape: Option<Vec<u8>>,
     shape_seq: u64,
+    /// What the tablet is allowed to do (see `access::capabilities`); None until first computed.
+    caps: Option<u8>,
+    caps_seq: u64,
 }
 
 /// Samples the system cursor and feeds every attached client. Works with any transport.
@@ -89,6 +93,11 @@ impl CursorHub {
                         })
                         .flatten();
                     let mut st = state.lock().unwrap();
+                    let caps = crate::access::capabilities();
+                    if st.caps != Some(caps) {
+                        st.caps = Some(caps);
+                        st.caps_seq += 1;
+                    }
                     if st.pos != Some(pos) {
                         st.pos = Some(pos);
                         st.pos_seq += 1;
@@ -152,7 +161,7 @@ fn send(w: &mut impl Write, body: &[u8]) -> std::io::Result<()> {
 
 fn client_loop<W: Write>(writer: W, state: &Mutex<State>, stop: &AtomicBool) -> std::io::Result<()> {
     let mut w = BufWriter::new(writer);
-    let (mut pos_seq, mut shape_seq) = (0u64, 0u64);
+    let (mut pos_seq, mut shape_seq, mut caps_seq) = (0u64, 0u64, 0u64);
     let mut last_pos_sent = Instant::now();
     while !stop.load(Ordering::Relaxed) {
         let (pos, shape) = {
@@ -164,6 +173,16 @@ fn client_loop<W: Write>(writer: W, state: &Mutex<State>, stop: &AtomicBool) -> 
                 (st.shape_seq != shape_seq).then(|| (st.shape.clone(), st.shape_seq)),
             )
         };
+        let caps = {
+            let st = state.lock().unwrap();
+            (st.caps_seq != caps_seq).then(|| (st.caps, st.caps_seq))
+        };
+        if let Some((bits, seq)) = caps {
+            caps_seq = seq;
+            if let Some(bits) = bits {
+                send(&mut w, &[3, bits])?;
+            }
+        }
         if let Some((msg, seq)) = shape {
             shape_seq = seq;
             if let Some(msg) = msg {

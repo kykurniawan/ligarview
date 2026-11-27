@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.1.0 to build the macOS .dmg and the Android .apk and publish them as a GitHub
+# Push a tag such as v0.2.0 to build the macOS .dmg and the Android .apk and publish them as a GitHub
 # release. Run it by hand (workflow_dispatch) to get the files as workflow artifacts without releasing.
 on:
   push:
@@ -80,6 +80,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The release notes are this version's section of CHANGELOG.md; without one, GitHub writes them.
+          tag="${GITHUB_REF_NAME#v}"
+          awk -v tag="$tag" '/^## \[/ { found = index($0, "[" tag "]") > 0; next } found' CHANGELOG.md > notes.md
+          notes=--generate-notes
+          if [ -s notes.md ]; then notes="--notes-file ../notes.md"; fi
           cd dist
           shasum -a 256 * > SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Ligarview $GITHUB_REF_NAME" --generate-notes *
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Ligarview $GITHUB_REF_NAME" $notes *

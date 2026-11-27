@@ -2,12 +2,12 @@
 
 Ligarview turns an Android tablet into a real **extended** second display for your Mac, over a USB cable or Wi-Fi. Think Sidecar, but for Android. It was built and tested with a Samsung Galaxy Tab S9 and an M1 Pro MacBook.
 
-The tablet is only a monitor: no touch input, no audio, no extras. You use the Mac's own mouse and keyboard, and the cursor moves onto the tablet like on any second screen.
+The tablet is a monitor first: the Mac's cursor moves onto it like on any second screen, and there is no audio. When you want it to, it can also control the Mac: the S Pen points and clicks, fingers scroll and zoom, and the tablet's keyboard types. All of that is off until you [switch it on](/docs/input).
 
 ## What is in the box
 
-- **The Mac app** (Rust). Creates a virtual display, captures it, encodes it in hardware and sends it to the tablet.
-- **The Android app** (Kotlin, Jetpack Compose). Decodes the video in hardware, draws the cursor on top and shows a status screen with recommendations.
+- **The Mac app** (Rust). Creates a virtual display (or takes your main one), captures it, encodes it in hardware and sends it to the tablet. It also turns the tablet's pen, finger and keyboard input into mouse and key events.
+- **The Android app** (Kotlin, Jetpack Compose). Decodes the video in hardware, draws the cursor on top, sends pen, touch and keyboard input back, and shows a status screen with recommendations.
 
 ## Quick start
 
@@ -15,6 +15,7 @@ The tablet is only a monitor: no touch input, no audio, no extras. You use the M
 2. Start **Ligarview** on the Mac and grant the Screen Recording permission once.
 3. Plug the tablet into the Mac and accept the prompt on the tablet.
 4. Open **System Settings → Displays** on the Mac to arrange the new display.
+5. Optional: [turn on pen, finger and keyboard control](/docs/input) in the Mac window.
 
 ## Requirements
 
@@ -23,9 +24,10 @@ The tablet is only a monitor: no touch input, no audio, no extras. You use the M
 | Mac | Apple Silicon, macOS 14 or newer (developed on macOS 15) |
 | Tablet | Android 11 or newer (API 30), hardware H.264 decoder |
 | Build tools | Rust (stable), Android SDK and JDK 17+ |
-| Permission | Screen Recording for the Mac app |
+| Permissions | Screen Recording for the Mac app, and Accessibility if you want the tablet to control the Mac |
 
 ## Good to know
 
 - The virtual display uses the private `CGVirtualDisplay` API. It needs no SIP changes or kernel extensions, but Apple can change it in a macOS update.
 - Ligarview is early software. It is useful today, and the rough edges are listed under [troubleshooting](/docs/troubleshooting).
+- What changed in each release is in the [changelog](https://github.com/kykurniawan/ligarview/blob/main/CHANGELOG.md). Update the Mac app and the Android app together.

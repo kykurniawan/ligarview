@@ -116,6 +116,7 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
      */
     private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "usb-writer").apply { isDaemon = true } }
     private val pendingControl = AtomicInteger(NONE)
+    private val queuedInput = AtomicInteger(0)
 
     /** Opening the video stream (first time and every retry) asks the host for a fresh one. */
     val videoSource = object : StreamSource {
@@ -127,7 +128,7 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
     }
     val cursorSource = object : StreamSource {
         override val label = "USB cursor"
-        override fun open() = Opened(cursor)
+        override fun open() = Opened(cursor, ::sendInput)
     }
 
     init {
@@ -162,6 +163,29 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
             } catch (_: IOException) {
                 shutdown()
             }
+        }
+    }
+
+    /** Sends one pen input message to the host (input channel). Dropped while the writer is backed up. */
+    fun sendInput(body: ByteArray) {
+        if (!alive || queuedInput.get() > MAX_QUEUED_INPUT) return
+        queuedInput.incrementAndGet()
+        try {
+            writer.execute {
+                queuedInput.decrementAndGet()
+                val frame = ByteArray(3 + body.size)
+                frame[0] = CH_INPUT.toByte()
+                frame[1] = (body.size shr 8).toByte()
+                frame[2] = body.size.toByte()
+                System.arraycopy(body, 0, frame, 3, body.size)
+                try {
+                    output.write(frame)
+                } catch (_: IOException) {
+                    shutdown()
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            queuedInput.decrementAndGet()
         }
     }
 
@@ -225,6 +249,8 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
         const val CH_CONTROL = 0
         const val CH_VIDEO = 1
         const val CH_CURSOR = 2
+        const val CH_INPUT = 3
+        const val MAX_QUEUED_INPUT = 64
         const val CTL_RESUME = 1
         const val CTL_PAUSE = 2
         const val CTL_ASK = 1

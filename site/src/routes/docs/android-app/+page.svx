@@ -8,12 +8,18 @@ The app opens on an information screen and returns to it with **Back**.
 
 - The state of the link: waiting, cable detected, connecting, streaming.
 - While streaming: live fps, bitrate and decode time.
-- A small live preview of the Mac screen, with the Mac's cursor drawn in it. **Tap the preview for full screen.** Back returns to the info screen. Long-press the full-screen picture for a statistics overlay.
+- A small live preview of the Mac screen, with the Mac's cursor drawn in it. **Tap the preview for full screen.** Back returns to the info screen.
 
 ## Right: connect and prepare
 
-- How to connect: USB steps with a live "cable detected" indicator, or Wi-Fi with a pairing code to enter on the Mac. The Mac starts and stops the connection; the tablet only shows the code and the state.
+- How to connect: USB steps with a live "cable detected" indicator, or Wi-Fi with a pairing code to enter on the Mac. The Mac starts and stops the connection; the tablet only shows the code and the state. Plugging the cable in selects the USB tab, and while the cable is in use the Wi-Fi tab says so instead of waiting for a Mac. There is no address to type: the Mac is found over the network.
 - Recommendations, read from the tablet itself: whether the high refresh rate is on, whether power saving is off (it lowers the refresh rate and slows the decoder), and whether Android may close the app in the background. Each one links to the right settings page.
+
+## In full screen
+
+Tap the small tab on the left edge to open the **sidebar**: modifier keys, Esc, Undo and Redo, Dock and menu bar, the keyboard, and a Disconnect button. With the Mac's permission, the S Pen and your fingers control the Mac from here. See [Pen, touch and keyboard](/docs/input).
+
+<img src="/tablet-fullscreen.jpg" alt="The tablet in full screen with the sidebar open" width="1600" height="1000" />
 
 ## Layout
 
@@ -21,4 +27,4 @@ The app follows the tablet's rotation. A portrait display fills an upright table
 
 ## Under the hood
 
-It is built with Jetpack Compose. The picture is a `SurfaceView` fed by the hardware decoder; it is moved and resized between the preview box and the full screen, never recreated, so the stream keeps running. The cursor is a separate overlay painted once per display refresh.
+It is built with Jetpack Compose. The picture is a `SurfaceView` fed by the hardware decoder; it is moved and resized between the preview box and the full screen, never recreated, so the stream keeps running. The cursor is a separate overlay painted once per display refresh. Pen and finger events are read from that view, and the sidebar and the keyboard's input view sit above it.

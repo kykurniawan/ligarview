@@ -5,9 +5,12 @@
 Use an Android tablet as a real **extended** second display for your Mac, over Wi-Fi or USB.
 Think Sidecar, but for Android (built and tested with a Samsung Galaxy Tab S9).
 
-No touch input, no audio, no extras. The tablet is just a monitor.
+The tablet is a monitor first, and there is no audio. When you want it to, it also controls the Mac: the S Pen
+points and clicks, fingers scroll and zoom, and the tablet's keyboard types, with a Sidecar-style sidebar for
+modifier keys, Esc, Undo, the Dock and the menu bar. All of that is **off until you switch it on** in the Mac
+window. You can also mirror the main display instead of adding an extra one.
 
-Docs: **https://ligarview.rizkykurniawan.id**
+Docs: **https://ligarview.rizkykurniawan.id** · [Changelog](CHANGELOG.md)
 
 ## How it works
 
@@ -32,6 +35,9 @@ Early work in progress.
 - [x] Host: capture + hardware H.264 encode
 - [x] Transport (TCP, works over Wi-Fi and USB via `adb reverse`)
 - [x] Android client (MediaCodec low-latency decode, fullscreen)
+- [x] Pen, finger scrolling and zoom, on-screen keyboard and sidebar (off by default, needs the Accessibility permission)
+- [x] Mirror the main display instead of an extra one
+- [ ] Pen tilt, tap to click with fingers, three-finger gestures
 - [ ] Latency and quality tuning
 
 ## Download
@@ -63,12 +69,12 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
 
    Or run it as an app: `tools/bundle.sh` builds `host/target/Ligarview.app` and `tools/dmg.sh` the disk image
    (move the app to Applications if you like). It has a Dock icon and a small window that shows the state and lets you pick
-   orientation, frame rate, quality and codec, start it at login, and grant the Screen Recording
-   permission. Closing the window keeps the host running; click the Dock icon to bring it back.
+   USB or Wi-Fi, an extended or a mirrored display, orientation, frame rate, quality and codec, start it at login,
+   decide what the tablet may control, and grant the Screen Recording permission. Closing the window keeps the host running; click the Dock icon to bring it back.
    Changing a setting relaunches the host with it. Settings live in
    `~/Library/Application Support/Ligarview/config`.
 
-   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video --no-adb`.
+   Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video --mirror --no-adb`.
    `--stats` prints capture/encode rates and latencies once per second.
 
 2. Android: install the `.apk` from the release, or build it (`tools/apk.sh`, or `cd android && ./gradlew installDebug` with USB debugging on).
@@ -77,8 +83,8 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
      cable in; the host notices the tablet, switches it into USB accessory mode and Android asks once
      whether to open Ligarview for the accessory (tick "use by default" to skip the question next time).
      Measured on a Tab S9 over USB 2.0: 0.25 ms round trip, 215 Mbit/s.
-   - **Wi-Fi**: the Mac announces itself over Bonjour. Open the app, enter the six-digit pairing code from the Ligarview window once, and the tablet connects by itself whenever the Mac is sharing (same network, 5 GHz recommended; ports 7878 and 7879 must be reachable). The Mac starts and stops the connection with **Stop sharing / Start sharing**; **New code** unpairs every tablet. If the Mac is not found, enter `<mac-ip>:7878` under Address.
-   - **Developer mode**: `ligarview-host --adb` sets up `adb reverse` tunnels (needs USB debugging); connect to `127.0.0.1:7878`. This replaces the USB accessory transport, the two fight over the device.
+   - **Wi-Fi**: the Mac announces itself over Bonjour. Open the app, enter the six-digit pairing code from the Ligarview window once, and the tablet connects by itself whenever the Mac is sharing (same network, 5 GHz recommended; ports 7878 and 7879 must be reachable). The Mac starts and stops the connection with **Stop sharing / Start sharing**; **New code** unpairs every tablet. The Mac must be set to **Connection: Wi-Fi**; in USB mode it does not listen on the network.
+   - **Developer mode**: `ligarview-host --adb` sets up `adb reverse` tunnels (needs USB debugging); then start the app with `adb shell am start -n app.ligarview.client/.MainActivity --es host 127.0.0.1:7878`. This replaces the USB accessory transport, the two fight over the device.
 
    Flags: `--no-usb`, `--no-tcp`, `--adb`.
 
@@ -87,8 +93,28 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
    it; the app follows the tablet's rotation, the full screen keeps the Mac's proportions (a portrait display
    fills an upright tablet exactly), and the information screen switches to one column.
 
-The app reconnects automatically and remembers the last address. Back returns to the connect screen.
-Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
+The app reconnects automatically. Back returns to the connect screen.
+For development, `adb shell am start -n app.ligarview.client/.MainActivity --ez stats true` shows a statistics overlay
+(fps, bitrate, decoder latency) in full screen.
+
+## Control the Mac from the tablet
+
+The Mac window has three switches, all off by default: **Allow pen control**, **Allow finger scrolling** and
+**Allow typing from the tablet**. Turning one on makes macOS ask for the **Accessibility** permission for Ligarview
+(System Settings → Privacy & Security → Accessibility); without it nothing from the tablet reaches the Mac.
+
+- **Pen**: hover moves the pointer, touching clicks and drags, the side button is a right-click, pressure is sent with the click.
+- **Fingers**: one or two fingers scroll in both directions and keep gliding after a flick; two fingers apart or
+  together zoom (sent as Ctrl + scroll, which Chromium-based apps and Figma read as zoom; Safari and Preview do not).
+  Fingers never click, so a resting hand cannot trigger anything.
+- **Sidebar** (the tab on the left edge in full screen): modifier keys you tap to hold or double-tap to lock, Esc,
+  Undo and Redo, Dock and menu bar (push the pointer against the tablet display's edge), the keyboard, and Disconnect.
+- **Typing**: the keyboard button opens the tablet's on-screen keyboard. The tablet can send text, Backspace, Return,
+  Tab, Delete, the arrows, Escape and Z; nothing else.
+
+The Mac tells the tablet what it allows, so a sidebar button it does not allow is dimmed. Over Wi-Fi the connection is
+not encrypted and the pairing code is a convenience, so turn these on only on a network you trust, or use USB.
+Details: [docs/input](https://ligarview.rizkykurniawan.id/docs/input).
 
 Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the video, `python3 tools/dump_cursor.py` prints cursor messages.
 
@@ -98,9 +124,9 @@ Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h
 
 The app opens on an information screen and returns to it with Back. On the left: what the tablet is
 doing (waiting, cable detected, connecting, streaming with live fps, bitrate and decode time) and a small
-live preview of the Mac screen, with the Mac's cursor drawn in it. Tap the preview for full screen; Back
+live preview of the Mac screen, with the Mac's cursor drawn in it. Tap the preview for full screen, where the tab on the left edge opens the sidebar; Back
 returns to the screen above. On the right: how to connect (USB steps with a live "cable detected"
-indicator, or a Wi-Fi address) and recommendations read from the tablet itself: whether the high refresh
+indicator, or a Wi-Fi pairing code) and recommendations read from the tablet itself: whether the high refresh
 rate is on, whether power saving is off (it lowers the refresh rate and slows the decoder), and whether
 Android may close the app in the background. Each one links to the right settings page.
 

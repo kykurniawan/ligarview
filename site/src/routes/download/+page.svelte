@@ -84,7 +84,9 @@
       </div>
     </div>
     <p class="more">
-      Step-by-step help is in the <a href="/docs/install">install guide</a>. Every release lists SHA-256 checksums.
+      Step-by-step help is in the <a href="/docs/install">install guide</a>. Every release lists SHA-256 checksums
+      and release notes; <a href="https://github.com/{repo}/blob/main/CHANGELOG.md">the changelog</a> has them all.
+      To let the tablet control the Mac with the pen, fingers or keyboard, see <a href="/docs/input">Pen, touch and keyboard</a>.
     </p>
   </section>
 </main>

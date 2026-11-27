@@ -53,11 +53,16 @@ enum Control {
     Pair,
     Unpair,
     Tablet,
+    Input,
+    Finger,
+    Connection,
+    Keyboard,
+    Display,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input, Self::Finger, Self::Connection, Self::Keyboard, Self::Display][t as usize]
     }
 }
 
@@ -124,13 +129,20 @@ struct Gui {
     tablet_row: Retained<NSStackView>,
     code_row: Retained<NSStackView>,
     unpair: Retained<NSButton>,
+    connection: Retained<NSPopUpButton>,
+    display: Retained<NSPopUpButton>,
+    orientation_row: Retained<NSStackView>,
     login: Retained<NSButton>,
+    input: Retained<NSButton>,
+    finger: Retained<NSButton>,
+    keyboard: Retained<NSButton>,
+    input_note: Retained<NSTextField>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
     quality: Retained<NSPopUpButton>,
     codec: Retained<NSPopUpButton>,
     config: Config,
-    shown: Option<(Status, bool, bool, String)>,
+    shown: Option<(Status, bool, bool, String, bool)>,
 }
 
 thread_local! {
@@ -260,6 +272,10 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let tablet_row = row(mtm, "Tablet", &tablet);
     let code_row = row(mtm, "Code", &code_row);
 
+    // How the tablet connects. Wi-Fi shows the pairing controls; USB needs none of them.
+    let connection = popup(mtm, &handler, Control::Connection, &["USB cable".into(), "Wi-Fi".into()], config.wifi as usize);
+    let connection_row = row(mtm, "Connection", &connection);
+
     // Settings.
     let orientation = popup(mtm, &handler, Control::Orientation, &["Landscape".into(), "Portrait".into()], config.portrait as usize);
     let fps_names: Vec<String> = FPS_CHOICES.iter().map(|f| format!("{f} fps")).collect();
@@ -269,19 +285,38 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let codec_popup = popup(mtm, &handler, Control::Codec, &["H.264".into(), "HEVC".into()], config.hevc as usize);
     let login = unsafe { NSButton::checkboxWithTitle_target_action(&s("Start at login"), Some(&*handler), Some(sel!(press:)), mtm) };
     login.setTag(Control::Login as isize);
+    let input = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow pen control from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
+    input.setTag(Control::Input as isize);
+    let finger = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow finger scrolling from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
+    finger.setTag(Control::Finger as isize);
+    let keyboard = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow typing from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
+    keyboard.setTag(Control::Keyboard as isize);
+    let input_note = label(mtm, "Needs Accessibility permission in System Settings.");
+    input_note.setTextColor(Some(&NSColor::systemOrangeColor()));
+    input_note.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    input_note.setHidden(true);
     let hint = label(mtm, "Changing a setting restarts the stream for a moment.");
     hint.setTextColor(Some(&NSColor::tertiaryLabelColor()));
     hint.setFont(Some(&NSFont::systemFontOfSize(11.0)));
 
+    let display = popup(mtm, &handler, Control::Display, &["Extended display".into(), "Mirror main display".into()], config.mirror as usize);
+    // Orientation belongs to the extra display; a mirrored display keeps the Mac's own shape.
+    let orientation_row = row(mtm, "Orientation", &orientation);
+    orientation_row.setHidden(config.mirror);
     let rows: Vec<Retained<NSStackView>> = vec![
-        row(mtm, "Orientation", &orientation),
+        row(mtm, "Display", &display),
+        orientation_row.clone(),
         row(mtm, "Frame rate", &fps),
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
     ];
-    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing_row, &tablet_row, &code_row, &message];
+    let mut views: Vec<&NSView> = vec![&header, &permission_row, &connection_row, &sharing_row, &tablet_row, &code_row, &message];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
+    views.push(&input);
+    views.push(&finger);
+    views.push(&keyboard);
+    views.push(&input_note);
     views.push(&hint);
     let root = NSStackView::stackViewWithViews(&NSArray::from_slice(&views), mtm);
     root.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
@@ -333,7 +368,14 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             tablet_row,
             code_row,
             unpair,
+            connection,
+            display,
+            orientation_row,
             login,
+            input,
+            finger,
+            keyboard,
+            input_note,
             orientation,
             fps,
             quality,
@@ -422,13 +464,15 @@ pub fn tick(status: Status) {
         gui.sharing.setTitle(&s(if status == Status::Off { "Start sharing" } else { "Stop sharing" }));
         let paired = crate::access::code() != 0;
         let name = crate::access::tablet();
-        if gui.shown != Some((status, access, paired, name.clone())) {
-            gui.shown = Some((status, access, paired, name.clone()));
-            let who = if name.is_empty() { "the tablet".to_string() } else { name.clone() };
+        let wifi = gui.config.wifi;
+        if gui.shown != Some((status, access, paired, name.clone(), wifi)) {
+            gui.shown = Some((status, access, paired, name.clone(), wifi));
+            let who = if name.is_empty() || !wifi { "the tablet".to_string() } else { name.clone() };
             let (text, color) = match (status, access) {
                 (Status::Off, _) => ("Sharing is off", NSColor::systemOrangeColor()),
                 (_, false) => ("Needs Screen Recording permission", NSColor::systemOrangeColor()),
                 (Status::Starting, _) => ("Starting…", NSColor::secondaryLabelColor()),
+                (Status::Waiting, _) if !wifi => ("Waiting for the tablet on the USB cable", NSColor::secondaryLabelColor()),
                 (Status::Waiting, _) if paired => (&*format!("Waiting for {who}"), NSColor::secondaryLabelColor()),
                 (Status::Waiting, _) => ("Not paired yet", NSColor::secondaryLabelColor()),
                 (Status::Streaming, _) => (&*format!("Streaming to {who}"), NSColor::systemGreenColor()),
@@ -437,16 +481,23 @@ pub fn tick(status: Status) {
             gui.status.setTextColor(Some(&color));
             // Pairing controls only matter while nothing is paired; Unpair only while something is.
             gui.permission_row.setHidden(access);
-            gui.tablet_row.setHidden(paired);
-            gui.code_row.setHidden(paired);
-            gui.message.setHidden(paired);
-            gui.unpair.setHidden(!paired);
+            gui.tablet_row.setHidden(!wifi || paired);
+            gui.code_row.setHidden(!wifi || paired);
+            gui.message.setHidden(!wifi || paired);
+            gui.unpair.setHidden(!wifi || !paired);
             // The window grows or shrinks with what is shown.
             if let Some(root) = gui.window.contentView() {
                 let size = root.fittingSize();
                 gui.window.setContentSize(NSSize { width: size.width.max(380.0), height: size.height });
             }
         }
+        let control = crate::access::control_enabled();
+        gui.input.setState(if control { NSControlStateValueOn } else { NSControlStateValueOff });
+        let finger = crate::access::finger_enabled();
+        gui.finger.setState(if finger { NSControlStateValueOn } else { NSControlStateValueOff });
+        let keyboard = crate::access::keyboard_enabled();
+        gui.keyboard.setState(if keyboard { NSControlStateValueOn } else { NSControlStateValueOff });
+        gui.input_note.setHidden(!(control || finger || keyboard) || crate::input::trusted());
         gui.login.setState(if login_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
         if REOPEN.swap(false, Ordering::Relaxed) {
             gui.window.makeKeyAndOrderFront(None);
@@ -479,6 +530,42 @@ impl Gui {
                 return;
             }
             Control::Tablet => return,
+            Control::Keyboard => {
+                let on = !crate::access::keyboard_enabled();
+                crate::access::set_keyboard(on);
+                self.config.keyboard = on;
+                self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
+                self.config.save();
+                if on && !crate::input::request_trust() {
+                    crate::input::open_accessibility_settings();
+                }
+                return;
+            }
+            Control::Finger => {
+                let on = !crate::access::finger_enabled();
+                crate::access::set_finger(on);
+                self.config.finger = on;
+                self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
+                self.config.save();
+                if on && !crate::input::request_trust() {
+                    crate::input::open_accessibility_settings();
+                }
+                return;
+            }
+            Control::Input => {
+                let on = !crate::access::control_enabled();
+                crate::access::set_control(on);
+                self.config.control = on;
+                self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
+                self.config.save();
+                if on && !crate::input::request_trust() {
+                    crate::input::open_accessibility_settings();
+                }
+                return;
+            }
             Control::Pair => {
                 let name = self.tablet.titleOfSelectedItem().map(|n| n.to_string()).unwrap_or_default();
                 let digits: String = self.code_field.stringValue().to_string().chars().filter(|c| c.is_ascii_digit()).collect();
@@ -500,12 +587,14 @@ impl Gui {
                     .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
                     .spawn();
             }
+            Control::Connection => self.config.wifi = value == 1,
+            Control::Display => self.config.mirror = value == 1,
             Control::Orientation => self.config.portrait = value == 1,
             Control::Codec => self.config.hevc = value == 1,
             Control::FrameRate => self.config.fps = FPS_CHOICES[value as usize],
             Control::Quality => self.config.bitrate = BITRATE_CHOICES[value as usize].0,
         }
-        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec);
+        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec, &self.connection, &self.display, &self.orientation_row);
         self.config.code = crate::access::code();
         self.config.tablet = crate::access::tablet();
         self.config.sharing = crate::access::enabled();

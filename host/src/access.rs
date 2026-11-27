@@ -4,6 +4,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static CODE: AtomicU32 = AtomicU32::new(0);
+static CONTROL: AtomicBool = AtomicBool::new(false);
+static FINGER: AtomicBool = AtomicBool::new(false);
+static KEYBOARD: AtomicBool = AtomicBool::new(false);
 static KICK: AtomicBool = AtomicBool::new(false);
 static TABLET: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -23,6 +26,45 @@ pub fn set_enabled(on: bool) {
     if !on {
         KICK.store(true, Ordering::SeqCst);
     }
+}
+
+/// Whether the tablet may control the Mac with its pen. Off until the user allows it.
+pub fn control_enabled() -> bool {
+    CONTROL.load(Ordering::SeqCst)
+}
+
+pub fn set_control(on: bool) {
+    CONTROL.store(on, Ordering::SeqCst);
+    if !on {
+        crate::input::release_all();
+    }
+}
+
+/// Whether the tablet may scroll the Mac with its fingers. Off until the user allows it.
+pub fn finger_enabled() -> bool {
+    FINGER.load(Ordering::SeqCst)
+}
+
+pub fn set_finger(on: bool) {
+    FINGER.store(on, Ordering::SeqCst);
+}
+
+/// Whether the tablet may type on the Mac (its on-screen keyboard or one attached to it).
+pub fn keyboard_enabled() -> bool {
+    KEYBOARD.load(Ordering::SeqCst)
+}
+
+pub fn set_keyboard(on: bool) {
+    KEYBOARD.store(on, Ordering::SeqCst);
+}
+
+/// What the tablet may do, as bits for the tablet to show or hide its controls:
+/// 1 pen and sidebar, 2 finger scrolling, 4 typing.
+pub fn capabilities() -> u8 {
+    if !enabled() {
+        return 0;
+    }
+    (control_enabled() as u8) | ((finger_enabled() as u8) << 1) | ((keyboard_enabled() as u8) << 2)
 }
 
 pub fn code() -> u32 {

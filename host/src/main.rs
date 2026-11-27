@@ -7,6 +7,7 @@ mod cursor_server;
 mod config;
 mod encoder;
 mod gui;
+mod input;
 mod pairing;
 mod protocol;
 mod server;
@@ -38,6 +39,9 @@ struct Args {
     /// Logical height in points
     #[arg(long, default_value_t = 800)]
     height: u32,
+    /// Mirror the main display instead of adding an extra one
+    #[arg(long)]
+    mirror: bool,
     /// Make the display upright (swaps width and height), e.g. for reading code on a tablet held vertically
     #[arg(long)]
     portrait: bool,
@@ -111,6 +115,7 @@ struct CGRect { origin: CGPoint, size: CGPoint }
 extern "C" {
     fn CGDisplayBounds(display: u32) -> CGRect;
     fn CGWarpMouseCursorPosition(p: CGPoint) -> i32;
+    fn CGMainDisplayID() -> u32;
 }
 
 fn wiggle(display: Arc<AtomicU32>, until: Instant) {
@@ -194,9 +199,29 @@ fn main() -> Result<()> {
         a.fps = c.fps;
         a.bitrate = c.bitrate;
         a.codec = if c.hevc { CodecArg::Hevc } else { CodecArg::H264 };
+        // Only the chosen transport runs: Wi-Fi listens on the network and pairs by code, USB
+        // needs neither (and the host then does not listen on the network at all).
+        a.no_tcp = !c.wifi;
+        a.no_usb = c.wifi;
+        a.mirror = c.mirror;
     }
-    if a.portrait {
+    if a.portrait && !a.mirror {
         std::mem::swap(&mut a.width, &mut a.height);
+    }
+    // Size of the display the tablet shows, in points; the cursor shapes are scaled against it.
+    let mut cursor_points = (a.width, a.height);
+    if a.mirror {
+        // The main display, scaled down (never up) to fit what the tablet can show, even sizes for the encoder.
+        let b = unsafe { CGDisplayBounds(CGMainDisplayID()) };
+        cursor_points = (b.size.x as u32, b.size.y as u32);
+        let (src_w, src_h) = (b.size.x * a.scale as f64, b.size.y * a.scale as f64);
+        let fit = (1.0f64)
+            .min((a.width * a.scale) as f64 / src_w)
+            .min((a.height * a.scale) as f64 / src_h);
+        let even = |v: f64| ((v * fit) as u32).max(2) & !1;
+        a.width = even(src_w);
+        a.height = even(src_h);
+        a.scale = 1;
     }
     if a.cursor_test {
         std::fs::create_dir_all("out/cursors")?;
@@ -253,11 +278,18 @@ fn main() -> Result<()> {
         let c = config::Config::load();
         gui::init(&c, (px_w, px_h), if c.hevc { "HEVC" } else { "H.264" }, !a.background);
     }
-    let mut vd = Some(create_display(&a, false)?);
+    // Mirror mode has no virtual display: the tablet shows the main display as it is.
+    let mut vd = if a.mirror { None } else { Some(create_display(&a, false)?) };
     for (id, w, h) in VirtualDisplay::active_displays() {
         println!("  display {id}: {w}x{h}{}", if Some(id) == vd.as_ref().map(|v| v.id) { "  <- ligarview" } else { "" });
     }
-    let display_id = Arc::new(AtomicU32::new(vd.as_ref().unwrap().id));
+    if a.mirror {
+        println!("mirroring the main display ({}x{} points) at {px_w}x{px_h}", cursor_points.0, cursor_points.1);
+    }
+    let display_id = Arc::new(AtomicU32::new(match &vd {
+        Some(v) => v.id,
+        None => unsafe { CGMainDisplayID() },
+    }));
 
     let (tx, rx) = mpsc::channel();
     let (info_tx, info_rx) = mpsc::channel();
@@ -266,10 +298,17 @@ fn main() -> Result<()> {
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
     let hello = protocol::Hello { codec: codec.id(), width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     let video = server::VideoHub::new(hello, rx, key_request.clone(), dump);
-    let cursor = (!a.cursor_in_video).then(|| cursor_server::CursorHub::new(display_id.clone(), (a.width, a.height)));
+    let cursor = (!a.cursor_in_video).then(|| cursor_server::CursorHub::new(display_id.clone(), cursor_points));
     {
         let c = config::Config::load();
         access::init(c.sharing || !gui, c.code, c.tablet);
+        access::set_control(c.control);
+        access::set_finger(c.finger);
+        access::set_keyboard(c.keyboard);
+        if gui && (c.control || c.finger || c.keyboard) && !input::request_trust() {
+            println!("input: waiting for the Accessibility permission");
+        }
+        input::init(display_id.clone());
     }
     if !a.no_tcp {
         tcp::spawn(a.port, video.clone(), cursor.clone())?;
@@ -343,7 +382,7 @@ fn main() -> Result<()> {
         if last_health.elapsed() >= Duration::from_millis(500) {
             last_health = Instant::now();
             let mut healthy = capture.as_ref().is_some_and(|c| c.is_alive())
-                && vd.as_ref().is_some_and(|v| VirtualDisplay::is_active(v.id));
+                && (a.mirror || vd.as_ref().is_some_and(|v| VirtualDisplay::is_active(v.id)));
             if drop_at.is_some_and(|t| Instant::now() >= t) {
                 drop_at = None;
                 healthy = false;
@@ -366,14 +405,20 @@ fn main() -> Result<()> {
                 }
                 pump_run_loop(Duration::from_secs(1));
                 while Instant::now() < deadline {
-                    let attempt = create_display(&a, true).and_then(|v| {
-                        let c = start_capture(&a, codec, v.id, &tx, &info_tx, &key_request)?;
-                        Ok((v, c))
-                    });
+                    let attempt = if a.mirror {
+                        let main = unsafe { CGMainDisplayID() };
+                        start_capture(&a, codec, main, &tx, &info_tx, &key_request).map(|c| (None, main, c))
+                    } else {
+                        create_display(&a, true).and_then(|v| {
+                            let id = v.id;
+                            let c = start_capture(&a, codec, id, &tx, &info_tx, &key_request)?;
+                            Ok((Some(v), id, c))
+                        })
+                    };
                     match attempt {
-                        Ok((v, c)) => {
-                            display_id.store(v.id, Ordering::Relaxed);
-                            vd = Some(v);
+                        Ok((v, id, c)) => {
+                            display_id.store(id, Ordering::Relaxed);
+                            vd = v;
                             capture = Some(c);
                             key_request.store(true, Ordering::SeqCst);
                             println!("recovered: display {}", display_id.load(Ordering::Relaxed));

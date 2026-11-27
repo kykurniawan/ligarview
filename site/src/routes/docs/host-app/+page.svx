@@ -4,17 +4,28 @@
 
 ## The window
 
-- **Status.** Not paired yet, waiting for the paired tablet, or streaming to it by name, with the resolution, frame rate and codec in use.
-- **Stop sharing / Start sharing.** Disconnects the tablet and refuses new connections until you start sharing again. The virtual display stays.
-- **Pairing.** While no tablet is paired, choose the tablet from the list, enter the six-digit code its Wi-Fi tab shows and press **Connect**. Once paired, these controls disappear.
-- **Unpair.** Forgets the tablet and disconnects it. Pairing again needs a new code from the tablet.
-- **Orientation.** Landscape, or Portrait for reading code with the tablet held upright. The shape of the display is decided by the Mac; the tablet only shows it.
+<img src="/mac-window.png" alt="The Ligarview window on the Mac" width="380" height="525" />
+
+- **Status.** Waiting for the tablet, not paired yet (Wi-Fi), or streaming to it, with the resolution, frame rate and codec in use.
+- **Connection.** **USB cable** or **Wi-Fi**. Only that transport runs. With Wi-Fi the window also shows the pairing controls below; with USB it shows none, and the Mac does not listen on the network.
+- **Stop sharing / Start sharing.** Disconnects the tablet and refuses new connections until you start sharing again.
+- **Pairing (Wi-Fi).** While no tablet is paired, choose the tablet from the list, enter the six-digit code its Wi-Fi tab shows and press **Connect**. Once paired, these controls disappear.
+- **Unpair (Wi-Fi).** Forgets the tablet and disconnects it. Pairing again needs a new code from the tablet.
+- **Display.** **Extended display** adds a second display to your Mac (the default). **Mirror main display** shows your main display on the tablet instead. See below.
+- **Orientation.** Landscape, or Portrait for reading code with the tablet held upright. The shape of the display is decided by the Mac; the tablet only shows it. Not used when mirroring.
 - **Frame rate.** 30, 60 or 90 fps.
 - **Quality.** 20, 30, 40 or 60 Mbps.
 - **Codec.** H.264 (default) or HEVC.
 - **Start at login.** Starts the app without opening the window.
+- **Allow pen control / finger scrolling / typing from the tablet.** Let the tablet control the Mac. All three are off by default. See [Pen, touch and keyboard](/docs/input).
 
 Changing a setting relaunches the host with it, so the tablet disconnects for a few seconds and reconnects by itself. Settings live in `~/Library/Application Support/Ligarview/config`.
+
+## Extended or mirrored
+
+In **Extended display** mode the Mac gets a new virtual display, 1280x800 points by default, which you arrange in **System Settings → Displays** and drag windows onto.
+
+In **Mirror main display** mode there is no extra display: the tablet shows your main display as it is, with the Mac's own proportions (the tablet shows bars if they differ from its own). The picture is scaled down, never up, to fit what the tablet can show. The pen and fingers then control the main display.
 
 ## Command line
 
@@ -29,6 +40,7 @@ host/target/release/ligarview-host --fps 120 --bitrate 60
 | `--width`, `--height` | 1280, 800 | Logical size in points. The picture is width x scale pixels |
 | `--scale` | 2 | 2 is HiDPI (2560x1600 real pixels), 1 is one pixel per point |
 | `--portrait` | off | Swap width and height |
+| `--mirror` | off | Mirror the main display instead of adding a virtual one |
 | `--fps` | 60 | Use 120 for a 120 Hz panel |
 | `--bitrate` | 30 | In Mbps |
 | `--codec` | h264 | `h264` or `hevc` |

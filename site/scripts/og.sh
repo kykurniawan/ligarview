@@ -4,6 +4,6 @@
 set -e
 cd "$(dirname "$0")/.."
 T=$(mktemp -d)
-cp scripts/og.svg static/icon-192.png static/desktop.jpg static/info-screen.png "$T/"
+cp scripts/og.svg static/icon-192.png static/desktop.jpg static/info-screen.png static/mac-window.png "$T/"
 rsvg-convert -w 1200 -h 630 "$T/og.svg" -o static/og.png
 echo "Wrote static/og.png"

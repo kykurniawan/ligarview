@@ -5,7 +5,7 @@
 //!
 //!   channel u8 | payload_len u16 (big-endian) | payload
 //!
-//! Channels: 0 control, 1 video, 2 cursor. The video and cursor channels carry exactly the
+//! Channels: 0 control, 1 video, 2 cursor, 3 input (app to host, one message per frame). The video and cursor channels carry exactly the
 //! byte streams that the TCP transport uses. Frames are at most 16000 bytes, so a small cursor
 //! message can slip in between the pieces of a large video frame.
 //!
@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 const CH_CONTROL: u8 = 0;
 const CH_VIDEO: u8 = 1;
 const CH_CURSOR: u8 = 2;
+const CH_INPUT: u8 = 3;
 
 const CTL_RESUME: u8 = 1;
 const CTL_PAUSE: u8 = 2;
@@ -258,6 +259,9 @@ fn reader(link: Arc<Link>, hubs: Arc<Hubs>) {
                             _ => {}
                         }
                     }
+                    if acc[0] == CH_INPUT {
+                        crate::input::handle(&acc[3..3 + len]);
+                    }
                     acc.drain(..3 + len);
                 }
             }
@@ -268,6 +272,7 @@ fn reader(link: Arc<Link>, hubs: Arc<Hubs>) {
         }
     }
     hubs.detach(&link);
+    crate::input::release_all();
 }
 
 /// Talks to a device that is already in accessory mode. Returns when the link ends.

@@ -14,7 +14,15 @@ interface StreamSource {
     fun open(): Opened
 }
 
-class Opened(val input: InputStream, private val onClose: () -> Unit = {}) : Closeable {
+/**
+ * `send` writes one input message body back to the host on this connection (null when the
+ * source cannot carry input); it blocks while the link is slow, so call it off the main thread.
+ */
+class Opened(
+    val input: InputStream,
+    val send: ((ByteArray) -> Unit)? = null,
+    private val onClose: () -> Unit = {},
+) : Closeable {
     override fun close() = onClose()
 }
 
@@ -35,7 +43,15 @@ class TcpSource(private val host: String, private val port: Int, private val cod
                 write(java.nio.ByteBuffer.allocate(4).putInt(code).array())
                 flush()
             }
-            return Opened(socket.getInputStream()) { socket.close() }
+            val out = socket.getOutputStream()
+            val send = { body: ByteArray ->
+                synchronized(out) {
+                    out.write(byteArrayOf((body.size shr 8).toByte(), body.size.toByte()))
+                    out.write(body)
+                    out.flush()
+                }
+            }
+            return Opened(socket.getInputStream(), send) { socket.close() }
         } catch (e: Exception) {
             socket.close()
             throw e

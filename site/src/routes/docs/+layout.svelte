@@ -7,6 +7,7 @@
     ['Connect', '/docs/connect'],
     ['The Mac app', '/docs/host-app'],
     ['The Android app', '/docs/android-app'],
+    ['Pen, touch and keyboard', '/docs/input'],
     ['Troubleshooting', '/docs/troubleshooting'],
     ['How it works', '/docs/how-it-works']
   ];
