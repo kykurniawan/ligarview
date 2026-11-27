@@ -22,8 +22,12 @@
 //!       Ctrl + scroll, which is how Chromium-based apps, Figma, maps and browsers zoom.
 //!   3 Modifiers: mask u8      (bit 0 Cmd, 1 Shift, 2 Ctrl, 3 Option; the keys the tablet's sidebar
 //!       holds right now. They are added to every pointer and scroll event until the next message.)
-//!   4 Key: keycode u16 | mask u8   (press and release one key with the modifiers in `mask`;
-//!       only Escape and Z, for Esc, Undo and Redo, are accepted)
+//!   4 Key: keycode u16 | mask u8   (press and release one key with the modifiers in `mask`. Only
+//!       Escape and Z (sidebar Esc, Undo, Redo) and the editing keys behind the on-screen keyboard
+//!       - Backspace, Return, Tab, Delete, arrows - are accepted)
+//!   6 Text: UTF-8 bytes      (characters typed on the tablet's keyboard, at most 200)
+//!   7 Edge: where u8         (0 pointer to the middle, 1 pushed against the bottom edge, 2 against
+//!       the top: brings up an auto-hidden Dock or menu bar on the tablet's display)
 //!
 //! Nothing is injected unless the user switched on "Allow pen control" (pointer) or "Allow
 //! finger scrolling" (scroll) in the window and macOS granted the Accessibility permission.
@@ -39,6 +43,9 @@ pub const MSG_SCROLL: u8 = 2;
 pub const MSG_MODIFIERS: u8 = 3;
 pub const MSG_KEY: u8 = 4;
 pub const MSG_PINCH: u8 = 5;
+pub const MSG_TEXT: u8 = 6;
+pub const MSG_EDGE: u8 = 7;
+const MAX_TEXT_BYTES: usize = 200;
 const PINCH_LEN: usize = 14;
 /// Points of Ctrl + scroll per unit of display diagonal; tuned by hand against Figma and browsers.
 const PINCH_GAIN: f64 = 900.0;
@@ -117,6 +124,31 @@ const MOD_ALL: u8 = MOD_CMD | MOD_SHIFT | MOD_CTRL | MOD_OPTION;
 
 const KEY_ESCAPE: u16 = 53;
 const KEY_Z: u16 = 6;
+const KEY_RETURN: u16 = 36;
+const KEY_TAB: u16 = 48;
+const KEY_BACKSPACE: u16 = 51;
+const KEY_DELETE: u16 = 117;
+const KEY_LEFT: u16 = 123;
+const KEY_RIGHT: u16 = 124;
+const KEY_DOWN: u16 = 125;
+const KEY_UP: u16 = 126;
+
+/// Keys that are typing (need "Allow typing"); Escape and Z belong to the sidebar.
+fn is_typing_key(code: u16) -> bool {
+    !matches!(code, KEY_ESCAPE | KEY_Z)
+}
+
+/// Mac key code of a character on a US layout, for shortcuts (Cmd+C and friends).
+fn keycode_for(ch: char) -> Option<u16> {
+    Some(match ch.to_ascii_lowercase() {
+        'a' => 0, 's' => 1, 'd' => 2, 'f' => 3, 'h' => 4, 'g' => 5, 'z' => 6, 'x' => 7, 'c' => 8,
+        'v' => 9, 'b' => 11, 'q' => 12, 'w' => 13, 'e' => 14, 'r' => 15, 'y' => 16, 't' => 17,
+        '1' => 18, '2' => 19, '3' => 20, '4' => 21, '6' => 22, '5' => 23, '9' => 25, '7' => 26,
+        '8' => 28, '0' => 29, 'o' => 31, 'u' => 32, 'i' => 34, 'p' => 35, 'l' => 37, 'j' => 38,
+        'k' => 40, 'n' => 45, 'm' => 46, ' ' => 49,
+        _ => return None,
+    })
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pinch {
@@ -137,6 +169,19 @@ pub fn parse_pinch(body: &[u8]) -> Option<Pinch> {
     (p.phase <= PH_CANCEL).then_some(p)
 }
 
+/// Typed characters; control characters are dropped (Return, Tab and Backspace travel as keys).
+pub fn parse_text(body: &[u8]) -> Option<String> {
+    if body.len() < 2 || body.len() > 1 + MAX_TEXT_BYTES || body[0] != MSG_TEXT {
+        return None;
+    }
+    let text: String = std::str::from_utf8(&body[1..]).ok()?.chars().filter(|c| !c.is_control()).collect();
+    (!text.is_empty()).then_some(text)
+}
+
+pub fn parse_edge(body: &[u8]) -> Option<u8> {
+    (body.len() == 2 && body[0] == MSG_EDGE && body[1] <= 2).then(|| body[1])
+}
+
 pub fn parse_modifiers(body: &[u8]) -> Option<u8> {
     (body.len() == 2 && body[0] == MSG_MODIFIERS).then(|| body[1] & MOD_ALL)
 }
@@ -148,7 +193,11 @@ pub fn parse_key(body: &[u8]) -> Option<(u16, u8)> {
         return None;
     }
     let key = u16::from_be_bytes([body[1], body[2]]);
-    matches!(key, KEY_ESCAPE | KEY_Z).then_some((key, body[3] & MOD_ALL))
+    matches!(
+        key,
+        KEY_ESCAPE | KEY_Z | KEY_RETURN | KEY_TAB | KEY_BACKSPACE | KEY_DELETE | KEY_LEFT | KEY_RIGHT | KEY_DOWN | KEY_UP
+    )
+    .then_some((key, body[3] & MOD_ALL))
 }
 
 /// Quartz event flag bits for a modifier mask.
@@ -209,6 +258,7 @@ extern "C" {
     fn CGEventCreateScrollWheelEvent2(source: *const (), units: u32, wheel_count: u32, wheel1: i32, wheel2: i32, wheel3: i32) -> *mut ();
     fn CGEventCreateKeyboardEvent(source: *const (), keycode: u16, down: bool) -> *mut ();
     fn CGEventGetFlags(event: *mut ()) -> u64;
+    fn CGEventKeyboardSetUnicodeString(event: *mut (), length: usize, string: *const u16);
     fn CGEventSetFlags(event: *mut (), flags: u64);
     fn CGEventPost(tap: u32, event: *mut ());
     fn CGEventSourceFlagsState(state: i32) -> u64;
@@ -396,6 +446,60 @@ fn post_scroll(dx: i32, dy: i32, ctrl: bool) {
     }
 }
 
+/// Types `text`. With Cmd or Ctrl armed in the sidebar a character is sent as a real key so that
+/// shortcuts work; everything else goes in as Unicode, which is layout independent.
+fn post_text(text: &str) {
+    let mods = MODIFIERS.load(Ordering::Relaxed);
+    for ch in text.chars() {
+        if mods & (MOD_CMD | MOD_CTRL) != 0 {
+            if let Some(code) = keycode_for(ch) {
+                post_key(code, mods);
+                continue;
+            }
+        }
+        let mut units = [0u16; 2];
+        let units = ch.encode_utf16(&mut units);
+        unsafe {
+            for down in [true, false] {
+                let e = CGEventCreateKeyboardEvent(source(), 0, down);
+                if e.is_null() {
+                    return;
+                }
+                CGEventKeyboardSetUnicodeString(e, units.len(), units.as_ptr());
+                CGEventSetFlags(e, hardware_flags() | flags_for(mods));
+                CGEventPost(HID_EVENT_TAP, e);
+                CFRelease(e as *const std::ffi::c_void);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+static NUDGING: AtomicBool = AtomicBool::new(false);
+
+/// Pushes the pointer against the tablet display's bottom or top edge for about a second, which
+/// brings up an auto-hidden Dock or menu bar there; 0 puts it back in the middle.
+fn nudge_edge(edge: u8) {
+    let Some(display) = DISPLAY.get() else { return };
+    let b = unsafe { CGDisplayBounds(display.load(Ordering::Relaxed)) };
+    if b.size.x <= 0.0 || b.size.y <= 0.0 || NUDGING.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let x = b.origin.x + b.size.x / 2.0;
+    let at = match edge {
+        1 => CGPoint { x, y: b.origin.y + b.size.y - 1.0 },
+        2 => CGPoint { x, y: b.origin.y },
+        _ => CGPoint { x, y: b.origin.y + b.size.y / 2.0 },
+    };
+    std::thread::spawn(move || {
+        for _ in 0..if edge == 0 { 1 } else { 30 } {
+            post(MOVED, at, BUTTON_LEFT, 0, 0.0);
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        NUDGING.store(false, Ordering::Relaxed);
+    });
+}
+
 /// Lifts a button that is still held, e.g. when the tablet disconnects mid-stroke.
 pub fn release_all() {
     let held = MODIFIERS.swap(0, Ordering::Relaxed);
@@ -406,16 +510,28 @@ pub fn release_all() {
     }
 }
 
-/// Sidebar messages: sticky modifiers and the few allowed keys.
+/// Sidebar and keyboard messages. Pen control covers the sidebar (modifiers, Esc, Undo, Dock and
+/// menu bar); typing has its own switch because it lets the tablet type into any app.
 fn handle_keys(body: &[u8]) {
     let modifiers = parse_modifiers(body);
     let key = parse_key(body);
-    if modifiers.is_none() && key.is_none() {
+    let text = parse_text(body);
+    let edge = parse_edge(body);
+    if modifiers.is_none() && key.is_none() && text.is_none() && edge.is_none() {
         return;
     }
-    if !access::enabled() || !access::control_enabled() {
-        // Never leave modifiers stuck on while control is off.
-        release_modifiers(MODIFIERS.swap(0, Ordering::Relaxed));
+    let allowed = if text.is_some() || key.is_some_and(|(code, _)| is_typing_key(code)) {
+        access::keyboard_enabled()
+    } else if modifiers.is_some() {
+        access::control_enabled() || access::keyboard_enabled()
+    } else {
+        access::control_enabled()
+    };
+    if !access::enabled() || !allowed {
+        if modifiers.is_some() {
+            // Never leave modifiers stuck on while control is off.
+            release_modifiers(MODIFIERS.swap(0, Ordering::Relaxed));
+        }
         return;
     }
     if !trusted() {
@@ -429,11 +545,17 @@ fn handle_keys(body: &[u8]) {
         post_key(keycode, mask);
         release_modifiers(mask);
     }
+    if let Some(text) = text {
+        post_text(&text);
+    }
+    if let Some(edge) = edge {
+        nudge_edge(edge);
+    }
 }
 
 /// Applies one message body from the tablet.
 pub fn handle(body: &[u8]) {
-    if matches!(body.first(), Some(&MSG_MODIFIERS) | Some(&MSG_KEY)) {
+    if matches!(body.first(), Some(&MSG_MODIFIERS) | Some(&MSG_KEY) | Some(&MSG_TEXT) | Some(&MSG_EDGE)) {
         return handle_keys(body);
     }
     let scroll = matches!(body.first(), Some(&MSG_SCROLL) | Some(&MSG_PINCH));
@@ -640,6 +762,8 @@ mod tests {
         };
         assert_eq!(parse_key(&key(KEY_Z, MOD_CMD | MOD_SHIFT)), Some((KEY_Z, MOD_CMD | MOD_SHIFT)));
         assert_eq!(parse_key(&key(KEY_ESCAPE, 0)), Some((KEY_ESCAPE, 0)));
+        assert_eq!(parse_key(&key(KEY_BACKSPACE, 0)), Some((KEY_BACKSPACE, 0)));
+        assert!(is_typing_key(KEY_BACKSPACE) && !is_typing_key(KEY_ESCAPE));
         // Anything else (say the letter Q with Cmd) is refused.
         assert!(parse_key(&key(12, MOD_CMD)).is_none());
         assert!(parse_key(&[MSG_KEY, 0, 6]).is_none());
@@ -659,6 +783,22 @@ mod tests {
         assert!(parse_pinch(&m).is_none());
         // A pinch is not a scroll and a scroll is not a pinch.
         assert!(parse_scroll(&m).is_none());
+    }
+
+    #[test]
+    fn parses_text_and_edges() {
+        assert_eq!(parse_text(&[MSG_TEXT, b'h', b'i']).as_deref(), Some("hi"));
+        assert_eq!(parse_text(&[MSG_TEXT, b'a', b'\n', 0x08, b'b']).as_deref(), Some("ab"));
+        assert_eq!(parse_text(&[MSG_TEXT, 0xf0, 0x9f, 0x99, 0x82]).as_deref(), Some("\u{1F642}"));
+        assert!(parse_text(&[MSG_TEXT]).is_none());
+        assert!(parse_text(&[MSG_TEXT, 0xff, 0xfe]).is_none());
+        let mut long = vec![MSG_TEXT];
+        long.extend(std::iter::repeat(b'x').take(MAX_TEXT_BYTES + 1));
+        assert!(parse_text(&long).is_none());
+        assert_eq!(parse_edge(&[MSG_EDGE, 1]), Some(1));
+        assert!(parse_edge(&[MSG_EDGE, 3]).is_none());
+        assert_eq!(keycode_for('C'), Some(8));
+        assert!(keycode_for('é').is_none());
     }
 
     #[test]

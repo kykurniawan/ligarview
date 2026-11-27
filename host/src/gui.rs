@@ -56,11 +56,13 @@ enum Control {
     Input,
     Finger,
     Connection,
+    Keyboard,
+    Display,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input, Self::Finger, Self::Connection][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input, Self::Finger, Self::Connection, Self::Keyboard, Self::Display][t as usize]
     }
 }
 
@@ -128,9 +130,12 @@ struct Gui {
     code_row: Retained<NSStackView>,
     unpair: Retained<NSButton>,
     connection: Retained<NSPopUpButton>,
+    display: Retained<NSPopUpButton>,
+    orientation_row: Retained<NSStackView>,
     login: Retained<NSButton>,
     input: Retained<NSButton>,
     finger: Retained<NSButton>,
+    keyboard: Retained<NSButton>,
     input_note: Retained<NSTextField>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
@@ -284,6 +289,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     input.setTag(Control::Input as isize);
     let finger = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow finger scrolling from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
     finger.setTag(Control::Finger as isize);
+    let keyboard = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow typing from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
+    keyboard.setTag(Control::Keyboard as isize);
     let input_note = label(mtm, "Needs Accessibility permission in System Settings.");
     input_note.setTextColor(Some(&NSColor::systemOrangeColor()));
     input_note.setFont(Some(&NSFont::systemFontOfSize(11.0)));
@@ -292,8 +299,13 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     hint.setTextColor(Some(&NSColor::tertiaryLabelColor()));
     hint.setFont(Some(&NSFont::systemFontOfSize(11.0)));
 
+    let display = popup(mtm, &handler, Control::Display, &["Extended display".into(), "Mirror main display".into()], config.mirror as usize);
+    // Orientation belongs to the extra display; a mirrored display keeps the Mac's own shape.
+    let orientation_row = row(mtm, "Orientation", &orientation);
+    orientation_row.setHidden(config.mirror);
     let rows: Vec<Retained<NSStackView>> = vec![
-        row(mtm, "Orientation", &orientation),
+        row(mtm, "Display", &display),
+        orientation_row.clone(),
         row(mtm, "Frame rate", &fps),
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
@@ -303,6 +315,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     views.push(&login);
     views.push(&input);
     views.push(&finger);
+    views.push(&keyboard);
     views.push(&input_note);
     views.push(&hint);
     let root = NSStackView::stackViewWithViews(&NSArray::from_slice(&views), mtm);
@@ -356,9 +369,12 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             code_row,
             unpair,
             connection,
+            display,
+            orientation_row,
             login,
             input,
             finger,
+            keyboard,
             input_note,
             orientation,
             fps,
@@ -479,7 +495,9 @@ pub fn tick(status: Status) {
         gui.input.setState(if control { NSControlStateValueOn } else { NSControlStateValueOff });
         let finger = crate::access::finger_enabled();
         gui.finger.setState(if finger { NSControlStateValueOn } else { NSControlStateValueOff });
-        gui.input_note.setHidden(!(control || finger) || crate::input::trusted());
+        let keyboard = crate::access::keyboard_enabled();
+        gui.keyboard.setState(if keyboard { NSControlStateValueOn } else { NSControlStateValueOff });
+        gui.input_note.setHidden(!(control || finger || keyboard) || crate::input::trusted());
         gui.login.setState(if login_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
         if REOPEN.swap(false, Ordering::Relaxed) {
             gui.window.makeKeyAndOrderFront(None);
@@ -512,6 +530,18 @@ impl Gui {
                 return;
             }
             Control::Tablet => return,
+            Control::Keyboard => {
+                let on = !crate::access::keyboard_enabled();
+                crate::access::set_keyboard(on);
+                self.config.keyboard = on;
+                self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
+                self.config.save();
+                if on && !crate::input::request_trust() {
+                    crate::input::open_accessibility_settings();
+                }
+                return;
+            }
             Control::Finger => {
                 let on = !crate::access::finger_enabled();
                 crate::access::set_finger(on);
@@ -558,12 +588,13 @@ impl Gui {
                     .spawn();
             }
             Control::Connection => self.config.wifi = value == 1,
+            Control::Display => self.config.mirror = value == 1,
             Control::Orientation => self.config.portrait = value == 1,
             Control::Codec => self.config.hevc = value == 1,
             Control::FrameRate => self.config.fps = FPS_CHOICES[value as usize],
             Control::Quality => self.config.bitrate = BITRATE_CHOICES[value as usize].0,
         }
-        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec, &self.connection);
+        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec, &self.connection, &self.display, &self.orientation_row);
         self.config.code = crate::access::code();
         self.config.tablet = crate::access::tablet();
         self.config.sharing = crate::access::enabled();

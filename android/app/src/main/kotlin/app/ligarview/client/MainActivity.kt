@@ -14,6 +14,8 @@ import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -69,6 +71,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var clientToken: Any? = null
     private var cursorClient: CursorClient? = null
     private var sidebar: Sidebar? = null
+    private lateinit var keyboardInput: KeyboardInput
     private lateinit var usbManager: UsbManager
     private var usbLink: UsbLink? = null
     private lateinit var permissionIntent: PendingIntent
@@ -126,6 +129,8 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         onBackPressedDispatcher.addCallback(this, backCallback)
+        // The keyboard overlays the picture instead of squeezing it.
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
 
         // Older versions let the user type an address and saved it; it is no longer used.
         prefs().edit().remove(KEY_TARGET).apply()
@@ -304,9 +309,26 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             true
         }
         // The S Pen controls the Mac's pointer in full screen (the host must allow it).
-        val sidebar = Sidebar(this) { cursorClient?.sendInput(it) }
+        val sidebar = Sidebar(
+            this,
+            send = { cursorClient?.sendInput(it) },
+            onKeyboard = ::toggleKeyboard,
+            onDisconnect = ::disconnect,
+        )
         this.sidebar = sidebar
         root.addView(sidebar.container, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        // The keyboard overlays the picture; the sidebar moves up out of its way and scrolls if needed.
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            sidebar.container.setPadding(0, 0, 0, insets.getInsets(WindowInsets.Type.ime()).bottom)
+            v.onApplyWindowInsets(insets)
+        }
+        keyboardInput = KeyboardInput(
+            this,
+            send = { cursorClient?.sendInput(it) },
+            sidebarMask = sidebar::mask,
+            keyDone = sidebar::strokeEnded,
+        )
+        root.addView(keyboardInput.view, FrameLayout.LayoutParams(1, 1))
         val pen = PenInput(
             enabled = { state.fullscreen && cursorClient?.canSendInput == true },
             send = { cursorClient?.sendInput(it) },
@@ -460,6 +482,27 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    /** Shows or hides the on-screen keyboard; what is typed goes to the Mac. */
+    private fun toggleKeyboard() {
+        val controller = window.insetsController ?: return
+        val shown = root.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+        if (shown) {
+            controller.hide(WindowInsets.Type.ime())
+        } else {
+            keyboardInput.view.requestFocus()
+            controller.show(WindowInsets.Type.ime())
+        }
+    }
+
+    /** A hardware keyboard attached to the tablet types on the Mac while the picture is full screen. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val usable = state.fullscreen && cursorClient?.canSendInput == true &&
+            event.keyCode != KeyEvent.KEYCODE_BACK && event.device?.isVirtual == false &&
+            event.isFromSource(InputDevice.SOURCE_KEYBOARD)
+        if (usable && keyboardInput.hardwareKey(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
     private fun prefs() = getSharedPreferences("ligarview", Context.MODE_PRIVATE)
 
     private fun openSettings(action: String) {
@@ -567,7 +610,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             onStatus = { status, detail -> onLinkStatus(token, status, detail) },
             onSize = ::onVideoSize,
         ).also { it.start() }
-        cursorClient = CursorClient(cursorSource, cursorOverlay).also { it.start() }
+        cursorClient = CursorClient(cursorSource, cursorOverlay).also {
+            it.onCaps = { bits -> runOnUiThread { sidebar?.setCaps(bits) } }
+            it.start()
+        }
         cursorOverlay.enabled = true
     }
 

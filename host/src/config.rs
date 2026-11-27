@@ -22,11 +22,15 @@ pub struct Config {
     /// How the tablet connects: over Wi-Fi (pairing code) or over the USB cable. Only that
     /// transport is started; the other stays off.
     pub wifi: bool,
+    /// Whether the tablet may type on the Mac.
+    pub keyboard: bool,
+    /// Show the Mac's main display on the tablet instead of adding an extra display.
+    pub mirror: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false, finger: false, wifi: false }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false, finger: false, wifi: false, keyboard: false, mirror: false }
     }
 }
 
@@ -57,6 +61,8 @@ impl Config {
                 ("tablet", v) => c.tablet = v.to_string(),
                 ("control", v) => c.control = v == "on",
                 ("finger", v) => c.finger = v == "on",
+                ("keyboard", v) => c.keyboard = v == "on",
+                ("display", v) => c.mirror = v == "mirror",
                 ("connection", v) => {
                     c.wifi = v == "wifi";
                     chose_connection = true;
@@ -77,7 +83,7 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\nfinger={}\nconnection={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\nfinger={}\nconnection={}\nkeyboard={}\ndisplay={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
@@ -87,7 +93,9 @@ impl Config {
             self.tablet.replace('\n', " "),
             if self.control { "on" } else { "off" },
             if self.finger { "on" } else { "off" },
-            if self.wifi { "wifi" } else { "usb" }
+            if self.wifi { "wifi" } else { "usb" },
+            if self.keyboard { "on" } else { "off" },
+            if self.mirror { "mirror" } else { "extend" }
         );
         let _ = std::fs::write(p, text);
     }
@@ -112,6 +120,13 @@ mod tests {
     fn an_explicit_choice_wins() {
         assert!(!Config::parse("code=123456\nconnection=usb\n").wifi);
         assert!(Config::parse("connection=wifi\n").wifi);
+    }
+
+    #[test]
+    fn display_mode_defaults_to_extend() {
+        assert!(!Config::parse("").mirror);
+        assert!(Config::parse("display=mirror\n").mirror);
+        assert!(!Config::parse("display=extend\n").mirror);
     }
 
     #[test]

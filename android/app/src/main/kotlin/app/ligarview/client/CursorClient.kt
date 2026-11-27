@@ -23,6 +23,13 @@ class CursorClient(
     @Volatile var connected = false
         private set
     @Volatile private var opened: Opened? = null
+
+    /** What the Mac allows (bits 1 pen and sidebar, 2 finger scrolling, 4 typing); -1 until it says. */
+    @Volatile var caps = -1
+        private set
+
+    /** Called (on the reader thread) when the Mac announces what it allows. */
+    @Volatile var onCaps: ((Int) -> Unit)? = null
     private var worker: Thread? = null
 
     /** Input goes out on its own thread: a slow or dead link must never block the UI. */
@@ -98,6 +105,11 @@ class CursorClient(
                         val y = input.readFloat()
                         overlay.setPosition(x, y, input.readUnsignedByte() != 0)
                     }
+                    TYPE_CAPS -> {
+                        val bits = input.readUnsignedByte()
+                        caps = bits
+                        onCaps?.invoke(bits)
+                    }
                     TYPE_SHAPE -> {
                         val w = input.readFloat()
                         val h = input.readFloat()
@@ -117,6 +129,7 @@ class CursorClient(
     private companion object {
         const val TYPE_POSITION = 1
         const val TYPE_SHAPE = 2
+        const val TYPE_CAPS = 3
         const val MAX_MESSAGE_BYTES = 1 shl 20
         const val MAX_QUEUED_INPUT = 64
     }
