@@ -2,7 +2,9 @@ mod adb;
 mod capture;
 mod cursor;
 mod cursor_server;
+mod config;
 mod encoder;
+mod menubar;
 mod protocol;
 mod server;
 mod tcp;
@@ -81,6 +83,9 @@ struct Args {
     /// Diagnostic: print every change of the system cursor for 20 seconds and exit
     #[arg(long)]
     cursor_watch: bool,
+    /// Run as a menu bar app (default when started from Ligarview.app); settings come from the menu
+    #[arg(long)]
+    menubar: bool,
     /// Test helper: move the cursor around the virtual display so frames change
     #[arg(long)]
     wiggle: bool,
@@ -173,6 +178,14 @@ fn start_capture(
 
 fn main() -> Result<()> {
     let mut a = Args::parse();
+    let menubar = a.menubar || menubar::launched_from_bundle();
+    if menubar {
+        let c = config::Config::load();
+        a.portrait = c.portrait;
+        a.fps = c.fps;
+        a.bitrate = c.bitrate;
+        a.codec = if c.hevc { CodecArg::Hevc } else { CodecArg::H264 };
+    }
     if a.portrait {
         std::mem::swap(&mut a.width, &mut a.height);
     }
@@ -214,6 +227,10 @@ fn main() -> Result<()> {
         CodecArg::Hevc => encoder::Codec::Hevc,
     };
 
+    if menubar {
+        let c = config::Config::load();
+        menubar::init(&c, (px_w, px_h), if c.hevc { "HEVC" } else { "H.264" });
+    }
     let mut vd = Some(create_display(&a, false)?);
     for (id, w, h) in VirtualDisplay::active_displays() {
         println!("  display {id}: {w}x{h}{}", if Some(id) == vd.as_ref().map(|v| v.id) { "  <- ligarview" } else { "" });
@@ -246,7 +263,15 @@ fn main() -> Result<()> {
         adb::spawn(ports);
     }
 
-    let mut capture = Some(start_capture(&a, codec, display_id.load(Ordering::Relaxed), &tx, &info_tx, &key_request)?);
+    let mut capture = match start_capture(&a, codec, display_id.load(Ordering::Relaxed), &tx, &info_tx, &key_request) {
+        Ok(c) => Some(c),
+        // The menu bar app keeps running without the Screen Recording permission and says so.
+        Err(e) if menubar => {
+            println!("capture not started: {e}");
+            None
+        }
+        Err(e) => return Err(e),
+    };
     println!("capturing {px_w}x{px_h} @ {} fps, {} Mbps, {codec:?}", a.fps, a.bitrate);
 
     let deadline = Instant::now() + Duration::from_secs(if a.seconds == 0 { u64::MAX / 4 } else { a.seconds });
@@ -263,6 +288,16 @@ fn main() -> Result<()> {
             println!("{m}");
         }
         pump_run_loop(Duration::from_millis(100));
+        if menubar {
+            let status = if capture.is_none() {
+                menubar::Status::Starting
+            } else if video.has_client() {
+                menubar::Status::Streaming
+            } else {
+                menubar::Status::Waiting
+            };
+            menubar::tick(status);
+        }
 
         // Supervisor: rebuild the display and capture if either went away
         // (system sleep/wake, display reconfiguration, ScreenCaptureKit stopping).
@@ -307,7 +342,13 @@ fn main() -> Result<()> {
                         }
                         Err(e) => {
                             println!("recovery failed: {e}; retrying in 2 s");
-                            std::thread::sleep(Duration::from_secs(2));
+                            // Keep the menu alive while waiting (e.g. for the Screen Recording permission).
+                            for _ in 0..20 {
+                                pump_run_loop(Duration::from_millis(100));
+                                if menubar {
+                                    menubar::tick(menubar::Status::Starting);
+                                }
+                            }
                         }
                     }
                 }

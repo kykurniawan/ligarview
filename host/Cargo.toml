@@ -13,3 +13,4 @@ anyhow = "1"
 screencapturekit = "12.0.0"
 clap = { version = "4.6.10", features = ["derive"] }
 rusb = { version = "0.9.4", features = ["vendored"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSMenu", "NSMenuItem", "NSImage", "NSEvent", "NSView", "NSCell", "NSImageRep", "objc2-core-foundation"] }

@@ -80,6 +80,11 @@ impl VideoHub {
         id
     }
 
+    /// True while a client is attached.
+    pub fn has_client(&self) -> bool {
+        self.slot.lock().unwrap().is_some()
+    }
+
     /// Stops streaming to client `id`, unless another client has replaced it in the meantime.
     pub fn detach(&self, id: u64) {
         let mut slot = self.slot.lock().unwrap();
