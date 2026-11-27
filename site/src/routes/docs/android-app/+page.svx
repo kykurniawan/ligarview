@@ -12,7 +12,7 @@ The app opens on an information screen and returns to it with **Back**.
 
 ## Right: connect and prepare
 
-- How to connect: USB steps with a live "cable detected" indicator, or a Wi-Fi address.
+- How to connect: USB steps with a live "cable detected" indicator, or Wi-Fi with a pairing code to enter on the Mac. The Mac starts and stops the connection; the tablet only shows the code and the state.
 - Recommendations, read from the tablet itself: whether the high refresh rate is on, whether power saving is off (it lowers the refresh rate and slows the decoder), and whether Android may close the app in the background. Each one links to the right settings page.
 
 ## Layout

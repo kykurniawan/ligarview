@@ -4,7 +4,7 @@
   import TabletMockup from '$lib/TabletMockup.svelte';
   const features = [
     ['A real extended display', 'Not a mirror. macOS recognizes a second monitor that you can arrange, drag windows onto and run at HiDPI, just like a Retina screen.'],
-    ['USB without USB debugging', 'Connect the cable and accept a single prompt on the tablet. No developer mode and no adb. Wi-Fi is supported as well.'],
+    ['USB without USB debugging', 'Connect the cable and accept a single prompt on the tablet. No developer mode and no adb. Wi-Fi pairs once with a code and then reconnects by itself.'],
     ['Built for low latency', 'Hardware H.264 or HEVC encoding and decoding. The cursor is rendered on the tablet itself, so it never waits for the video.'],
     ['Nothing extra', 'No touch input, no audio and no account. The tablet is a monitor, and it does that one job well.']
   ];
@@ -55,7 +55,7 @@
       <MacMockup />
       <div class="copy">
         <h3>The Mac app</h3>
-        <p>A single small window shows the connection state and the display in use. Choose orientation, frame rate, quality and codec, start it at login, and close the window: the host keeps running.</p>
+        <p>The Mac is in charge of the connection. A single small window shows the state, starts and stops sharing, and pairs a tablet with the code it shows. Choose orientation, frame rate, quality and codec, start it at login, and close the window: the host keeps running.</p>
       </div>
     </div>
     <div class="show flip">

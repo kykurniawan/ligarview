@@ -7,8 +7,9 @@
         <div class="body">
           <div class="head">
             <img src="/logo.png" alt="" />
-            <div><strong>Ligarview</strong><span class="ok">Streaming to the tablet</span><span class="dim">2560x1600 · 60 fps · H.264</span></div>
+            <div><strong>Ligarview</strong><span class="ok">Streaming to SM-X710</span><span class="dim">2560x1600 · 60 fps · H.264</span></div>
           </div>
+          <div class="acts"><span class="select">Stop sharing</span><span class="select">Unpair</span></div>
           {#each [['Orientation', 'Landscape'], ['Frame rate', '60 fps'], ['Quality', 'High (30 Mbps)'], ['Codec', 'H.264']] as [label, value]}
             <div class="row"><span class="dim">{label}</span><span class="select">{value}<i>⌃</i></span></div>
           {/each}
@@ -21,6 +22,7 @@
 </div>
 
 <style>
+  .acts { display: flex; gap: 1.2cqw; }
   .laptop { container-type: inline-size; width: 100%; filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.45)); }
   .lid { width: 86%; margin: 0 auto; padding: 1.1cqw 1.1cqw 1.4cqw; background: #0a0b0d; border-radius: 2.2cqw 2.2cqw 0 0; box-shadow: inset 0 0 0 1px #2a2e34, 0 0 0 0.4cqw #9aa0a8; }
   .screen { position: relative; aspect-ratio: 2000 / 1299; border-radius: 0.8cqw; overflow: hidden; font-size: 1.3cqw; color: #e8e8ea; background: #2a3550 url('/desktop.jpg') center / cover; }

@@ -69,8 +69,9 @@
   <div class="body">
     <div class="head">
       <img src="/logo.png" alt="" />
-      <div><strong>Ligarview</strong><span class="ok">Streaming to the tablet</span><span class="dim">2560x1600 · 60 fps · H.264</span></div>
+      <div><strong>Ligarview</strong><span class="ok">Streaming to SM-X710</span><span class="dim">2560x1600 · 60 fps · H.264</span></div>
     </div>
+    <div class="acts"><span class="select">Stop sharing</span><span class="select">Unpair</span></div>
     {#each [['Orientation', 'Landscape'], ['Frame rate', '60 fps']] as [label, value]}
       <div class="row"><span class="dim">{label}</span><span class="select">{value}</span></div>
     {/each}
@@ -79,6 +80,7 @@
 {/snippet}
 
 <style>
+  .acts { display: flex; gap: 1.2cqw; }
   .stage { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 100 / 42; }
   .mac, .tab { position: absolute; background: #050608; box-shadow: inset 0 0 0 1px #2a2f36, 0 2.4cqw 4cqw rgba(0, 0, 0, 0.5); }
   .mac { left: 0; top: 0; width: 60cqw; padding: 0.6cqw; border-radius: 1.2cqw; }

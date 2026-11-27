@@ -24,6 +24,10 @@ The default rate control sustains about 57 fps on a busy 2560x1600 screen with a
 
 The cursor is not part of the video. The host sends its position, and its shape when it changes, on a second connection. The tablet draws it on top once per display refresh, so the cursor never waits for capture, encode and decode.
 
+## Wi-Fi discovery and pairing
+
+Both sides announce themselves over Bonjour. The Mac publishes `_ligarview._tcp`; the tablet publishes `_ligarview-tablet._tcp` and listens on a random port. The tablet shows a six-digit code. When you enter it on the Mac, the Mac sends it to the tablet, and if it matches, the tablet stores it as its secret and connects to the Mac. Every later Wi-Fi connection starts with that code, and the host refuses anything else (connections from the Mac itself, as with `adb reverse`, are exempt). Unpairing clears the code on the Mac. The code is a convenience for a trusted home network, not strong authentication, and the stream is not encrypted.
+
 ## Transports
 
 | Transport | Video | Cursor |

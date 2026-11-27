@@ -12,9 +12,15 @@ Measured on a Galaxy Tab S9 over USB 2.0: 0.25 ms round trip and 215 Mbit/s. A U
 
 ## Wi-Fi
 
-The Mac announces itself over Bonjour, so there is no address to type. Open the Android app, choose the **Wi-Fi** tab, and enter the six-digit pairing code shown in the Ligarview window on the Mac. The tablet remembers it and connects automatically whenever the Mac is sharing. Both devices must be on the same network (5 GHz recommended), and ports **7878** (video) and **7879** (cursor) must be reachable.
+Wi-Fi is paired once, from the Mac. After that the tablet reconnects by itself.
 
-The Mac manages the connection: **Stop sharing** disconnects the tablet and refuses new connections (Wi-Fi and USB), **Start sharing** allows them again, and **New code** unpairs every tablet. If the Mac cannot be found, enter its address as `<mac-ip>:7878` in the optional Address field. With the USB cable plugged in, the tablet prefers USB.
+1. Put both devices on the same network (5 GHz recommended) and unplug the USB cable. With a cable attached the tablet prefers USB.
+2. Open the Android app and choose the **Wi-Fi** tab. It shows a six-digit code and announces the tablet to the Mac.
+3. In the Ligarview window on the Mac, choose the tablet from the list, enter the code and press **Connect**.
+
+The tablet remembers the pairing and connects whenever the Mac is sharing. Both ports **7878** (video) and **7879** (cursor) must be reachable, and the network must allow Bonjour (mDNS) so the two devices can find each other.
+
+The Mac manages the connection. **Stop sharing** disconnects the tablet and refuses new connections over Wi-Fi and USB, **Start sharing** allows them again, and **Unpair** forgets the tablet so a new code is needed. Once a tablet is paired the window hides the pairing controls.
 
 ## Developer mode (adb)
 

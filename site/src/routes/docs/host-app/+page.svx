@@ -4,7 +4,10 @@
 
 ## The window
 
-- **Status.** Waiting for the tablet, or streaming, with the resolution, frame rate and codec in use.
+- **Status.** Not paired yet, waiting for the paired tablet, or streaming to it by name, with the resolution, frame rate and codec in use.
+- **Stop sharing / Start sharing.** Disconnects the tablet and refuses new connections until you start sharing again. The virtual display stays.
+- **Pairing.** While no tablet is paired, choose the tablet from the list, enter the six-digit code its Wi-Fi tab shows and press **Connect**. Once paired, these controls disappear.
+- **Unpair.** Forgets the tablet and disconnects it. Pairing again needs a new code from the tablet.
 - **Orientation.** Landscape, or Portrait for reading code with the tablet held upright. The shape of the display is decided by the Mac; the tablet only shows it.
 - **Frame rate.** 30, 60 or 90 fps.
 - **Quality.** 20, 30, 40 or 60 Mbps.

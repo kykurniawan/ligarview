@@ -6,6 +6,12 @@
 - Start the Mac app first, then plug in. If Android asked "Open Ligarview?" and you dismissed it, unplug and replug.
 - Do not run the host with `--adb` at the same time: it replaces the USB transport.
 
+## The tablet does not appear in the Mac window, or Wi-Fi will not connect
+
+- Open the Android app first, on its **Wi-Fi** tab, and unplug the USB cable.
+- Both devices must be on the same network. Routers with client isolation, guest networks and some mesh systems block the Bonjour discovery the pairing relies on.
+- If the tablet shows "refused", the code is wrong or sharing is off on the Mac. Press **Unpair** and pair again with the code currently on the tablet.
+
 ## macOS keeps asking for Screen Recording
 
 Remove the old **Ligarview** entry in **Privacy & Security → Screen & System Audio Recording**, add it again, and reopen the app. If you build from source, use `tools/bundle.sh`: it signs the app with a requirement tied to its identifier so the permission survives rebuilds.
