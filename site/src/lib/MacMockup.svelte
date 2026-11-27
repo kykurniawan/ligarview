@@ -25,8 +25,8 @@
 <style>
   .laptop { container-type: inline-size; width: 100%; filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.45)); }
   .lid { width: 86%; margin: 0 auto; padding: 1.1cqw 1.1cqw 1.4cqw; background: #0a0b0d; border-radius: 2.2cqw 2.2cqw 0 0; box-shadow: inset 0 0 0 1px #2a2e34, 0 0 0 0.4cqw #9aa0a8; }
-  .screen { position: relative; aspect-ratio: 16 / 10; border-radius: 0.8cqw; overflow: hidden; font-size: 1.3cqw; color: #e8e8ea; background: radial-gradient(120% 90% at 20% 100%, rgba(18, 80, 211, 0.6), transparent 60%), radial-gradient(90% 80% at 90% 10%, rgba(110, 155, 255, 0.3), transparent 60%), linear-gradient(135deg, #0f1b45, #1c1a63 55%, #3a1f78); }
-  .menubar { display: flex; align-items: center; gap: 1.6em; height: 2.4em; padding: 0 1.4em; background: rgba(8, 10, 14, 0.45); font-size: 0.95em; color: #e8ebf0; }
+  .screen { position: relative; aspect-ratio: 16 / 10; border-radius: 0.8cqw; overflow: hidden; font-size: 1.3cqw; color: #e8e8ea; background: #2a3550 url('/wallpaper.jpg') center / cover; }
+  .menubar { display: flex; align-items: center; gap: 1.6em; height: 2.4em; padding: 0 1.4em; background: rgba(20, 24, 32, 0.38); backdrop-filter: blur(8px); font-size: 0.95em; color: #fff; }
   .menubar b { font-weight: 650; }
   .menubar span { opacity: 0.8; }
   .menubar em { margin-left: auto; width: 8em; height: 0.55em; border-radius: 1em; background: rgba(232, 235, 240, 0.5); }
