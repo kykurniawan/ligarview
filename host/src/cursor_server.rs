@@ -1,4 +1,4 @@
-//! Cursor channel (TCP, video port + 1). Messages (big-endian), each prefixed by
+//! Cursor channel (TCP port + 1, or the USB pipe's cursor channel). Messages (big-endian), each prefixed by
 //! `len u32` (type byte + body):
 //!   1 Position: x f32 | y f32 | inside u8        (x, y in 0..1 of the display)
 //!   2 Shape:    width f32 | height f32 | hot_x f32 | hot_y f32 | PNG bytes
@@ -6,8 +6,7 @@
 
 use crate::cursor;
 use std::io::{BufWriter, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -28,90 +27,94 @@ struct State {
     shape_seq: u64,
 }
 
-/// `display` can change when the virtual display is recreated.
-pub fn spawn(port: u16, display: Arc<AtomicU32>, display_points: (u32, u32)) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(("0.0.0.0", port))?;
-    println!("cursor channel on 0.0.0.0:{port}");
+/// Samples the system cursor and feeds every attached client. Works with any transport.
+pub struct CursorHub {
+    state: Arc<Mutex<State>>,
+    clients: Arc<AtomicUsize>,
+}
 
-    let state = Arc::new(Mutex::new(State::default()));
-    let clients = Arc::new(AtomicUsize::new(0));
+impl CursorHub {
+    /// `display` can change when the virtual display is recreated.
+    pub fn new(display: Arc<AtomicU32>, display_points: (u32, u32)) -> Arc<Self> {
+        let state = Arc::new(Mutex::new(State::default()));
+        let clients = Arc::new(AtomicUsize::new(0));
 
-    // Producer: samples the system cursor while somebody is listening.
-    {
-        let (state, clients) = (state.clone(), clients.clone());
-        std::thread::spawn(move || {
-            let mut seed = i32::MIN;
-            let mut last_png: Vec<u8> = Vec::new();
-            let mut tick = 0u32;
-            let mut was_inside: Option<bool> = None;
-            loop {
-                if clients.load(Ordering::Relaxed) == 0 {
-                    seed = i32::MIN; // resend the shape to the next client
-                    last_png.clear();
-                    std::thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-                let pos = cursor::position(display.load(Ordering::Relaxed));
-                if was_inside != Some(pos.inside) {
-                    was_inside = Some(pos.inside);
-                    println!(
-                        "{} cursor: {} the virtual display at ({:.3}, {:.3})",
-                        ts(),
-                        if pos.inside { "entered" } else { "left" },
-                        pos.x,
-                        pos.y
-                    );
-                }
-                let new_seed = cursor::shape_seed();
-                tick = tick.wrapping_add(1);
-                // The seed does not catch every change (e.g. cursors hidden and shown again),
-                // so the image is also re-read every ~100 ms and sent when it differs.
-                let shape = (new_seed != seed || tick % 25 == 0)
-                    .then(|| {
-                        seed = new_seed;
-                        let shape = cursor::current_shape();
-                        if shape.is_none() {
-                            println!("cursor: no image for shape seed {new_seed}");
-                        }
-                        shape.filter(|s| s.png != last_png).map(|s| {
-                            println!(
-                                "{} cursor: shape {:.0}x{:.0} pts, hot ({:.0},{:.0}), {} bytes",
-                                ts(),
-                                s.width_pts, s.height_pts, s.hot_x_pts, s.hot_y_pts, s.png.len()
-                            );
-                            last_png = s.png.clone();
-                            encode_shape(&s, display_points)
-                        })
-                    })
-                    .flatten();
-                let mut st = state.lock().unwrap();
-                if st.pos != Some(pos) {
-                    st.pos = Some(pos);
-                    st.pos_seq += 1;
-                }
-                if let Some(msg) = shape {
-                    st.shape = Some(msg);
-                    st.shape_seq += 1;
-                }
-                drop(st);
-                std::thread::sleep(Duration::from_millis(4));
-            }
-        });
-    }
-
-    std::thread::spawn(move || {
-        for conn in listener.incoming() {
-            let Ok(stream) = conn else { continue };
-            let _ = stream.set_nodelay(true);
+        // Producer: samples the system cursor while somebody is listening.
+        {
             let (state, clients) = (state.clone(), clients.clone());
-            clients.fetch_add(1, Ordering::Relaxed);
             std::thread::spawn(move || {
-                let _ = client_loop(stream, &state);
-                clients.fetch_sub(1, Ordering::Relaxed);
+                let mut seed = i32::MIN;
+                let mut last_png: Vec<u8> = Vec::new();
+                let mut tick = 0u32;
+                let mut was_inside: Option<bool> = None;
+                loop {
+                    if clients.load(Ordering::Relaxed) == 0 {
+                        seed = i32::MIN; // resend the shape to the next client
+                        last_png.clear();
+                        std::thread::sleep(Duration::from_millis(100));
+                        continue;
+                    }
+                    let pos = cursor::position(display.load(Ordering::Relaxed));
+                    if was_inside != Some(pos.inside) {
+                        was_inside = Some(pos.inside);
+                        println!(
+                            "{} cursor: {} the virtual display at ({:.3}, {:.3})",
+                            ts(),
+                            if pos.inside { "entered" } else { "left" },
+                            pos.x,
+                            pos.y
+                        );
+                    }
+                    let new_seed = cursor::shape_seed();
+                    tick = tick.wrapping_add(1);
+                    // The seed does not catch every change (e.g. cursors hidden and shown again),
+                    // so the image is also re-read every ~100 ms and sent when it differs.
+                    let shape = (new_seed != seed || tick % 25 == 0)
+                        .then(|| {
+                            seed = new_seed;
+                            let shape = cursor::current_shape();
+                            if shape.is_none() {
+                                println!("cursor: no image for shape seed {new_seed}");
+                            }
+                            shape.filter(|s| s.png != last_png).map(|s| {
+                                println!(
+                                    "{} cursor: shape {:.0}x{:.0} pts, hot ({:.0},{:.0}), {} bytes",
+                                    ts(),
+                                    s.width_pts, s.height_pts, s.hot_x_pts, s.hot_y_pts, s.png.len()
+                                );
+                                last_png = s.png.clone();
+                                encode_shape(&s, display_points)
+                            })
+                        })
+                        .flatten();
+                    let mut st = state.lock().unwrap();
+                    if st.pos != Some(pos) {
+                        st.pos = Some(pos);
+                        st.pos_seq += 1;
+                    }
+                    if let Some(msg) = shape {
+                        st.shape = Some(msg);
+                        st.shape_seq += 1;
+                    }
+                    drop(st);
+                    std::thread::sleep(Duration::from_millis(4));
+                }
             });
         }
-    });
-    Ok(())
+        Arc::new(Self { state, clients })
+    }
+
+    /// Starts sending to `writer`. Returns a flag that ends the client when set.
+    pub fn attach<W: Write + Send + 'static>(&self, writer: W) -> Arc<AtomicBool> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let (state, clients, flag) = (self.state.clone(), self.clients.clone(), stop.clone());
+        clients.fetch_add(1, Ordering::Relaxed);
+        std::thread::spawn(move || {
+            let _ = client_loop(writer, &state, &flag);
+            clients.fetch_sub(1, Ordering::Relaxed);
+        });
+        stop
+    }
 }
 
 fn encode_shape(s: &cursor::Shape, (dw, dh): (u32, u32)) -> Vec<u8> {
@@ -131,11 +134,11 @@ fn send(w: &mut impl Write, body: &[u8]) -> std::io::Result<()> {
     w.flush()
 }
 
-fn client_loop(stream: TcpStream, state: &Mutex<State>) -> std::io::Result<()> {
-    let mut w = BufWriter::new(stream);
+fn client_loop<W: Write>(writer: W, state: &Mutex<State>, stop: &AtomicBool) -> std::io::Result<()> {
+    let mut w = BufWriter::new(writer);
     let (mut pos_seq, mut shape_seq) = (0u64, 0u64);
     let mut last_pos_sent = Instant::now();
-    loop {
+    while !stop.load(Ordering::Relaxed) {
         let (pos, shape) = {
             let st = state.lock().unwrap();
             (
@@ -163,4 +166,5 @@ fn client_loop(stream: TcpStream, state: &Mutex<State>) -> std::io::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(2));
     }
+    Ok(())
 }

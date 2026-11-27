@@ -4,8 +4,6 @@ import android.graphics.BitmapFactory
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
 import kotlin.concurrent.thread
 
 /**
@@ -13,8 +11,7 @@ import kotlin.concurrent.thread
  * Reconnects until [stop]. Wire format: see host/src/cursor_server.rs.
  */
 class CursorClient(
-    private val host: String,
-    private val port: Int,
+    private val source: StreamSource,
     private val overlay: CursorOverlay,
 ) {
     @Volatile private var running = false
@@ -22,7 +19,7 @@ class CursorClient(
     /** True while the cursor connection to the host is up. */
     @Volatile var connected = false
         private set
-    @Volatile private var socket: Socket? = null
+    @Volatile private var opened: Opened? = null
     private var worker: Thread? = null
 
     fun start() {
@@ -33,7 +30,7 @@ class CursorClient(
     fun stop() {
         running = false
         try {
-            socket?.close()
+            opened?.close()
         } catch (_: IOException) {
         }
         worker?.join(1000)
@@ -58,12 +55,9 @@ class CursorClient(
     }
 
     private fun session() {
-        Socket().also { socket = it }.use { sock ->
-            sock.tcpNoDelay = true
-            sock.soTimeout = READ_TIMEOUT_MS // the host resends the position every second
-            sock.connect(InetSocketAddress(host, port), 3000)
+        source.open().also { opened = it }.use { link ->
             connected = true
-            val input = DataInputStream(BufferedInputStream(sock.getInputStream(), 16 * 1024))
+            val input = DataInputStream(BufferedInputStream(link.input, 16 * 1024))
             while (running) {
                 val length = input.readInt()
                 if (length < 1 || length > MAX_MESSAGE_BYTES) throw IOException("Bad cursor message size $length")
@@ -93,6 +87,5 @@ class CursorClient(
         const val TYPE_POSITION = 1
         const val TYPE_SHAPE = 2
         const val MAX_MESSAGE_BYTES = 1 shl 20
-        const val READ_TIMEOUT_MS = 4000
     }
 }

@@ -9,10 +9,10 @@ No touch input, no audio, no extras. The tablet is just a monitor.
 
 ```
 Mac (Rust)                                        Android (Kotlin)
-CGVirtualDisplay -> ScreenCaptureKit              TCP
+CGVirtualDisplay -> ScreenCaptureKit              USB accessory pipe or TCP
   (extra display)    (capture)  -> VideoToolbox  ====>  MediaCodec -> SurfaceView
                                    H.264 (HW)
-Wi-Fi: direct TCP  |  USB: `adb reverse` tunnel
+USB: Android Open Accessory (no USB debugging)  |  Wi-Fi: TCP  |  developer: `adb reverse`
 ```
 
 ## Layout
@@ -54,8 +54,14 @@ Early work in progress.
 
 2. Android: build and install the app (`cd android && ./gradlew installDebug`).
 3. Connect:
-   - **USB**: enable USB debugging, plug the cable in, open the app and connect to `127.0.0.1:7878`. The host sets up (and re-creates) the `adb reverse` tunnels for video and cursor by itself; use `--no-adb` to manage them yourself.
+   - **USB (default, plug and play)**: nothing to enable on the tablet, no USB debugging, no adb. Plug the
+     cable in; the host notices the tablet, switches it into USB accessory mode and Android asks once
+     whether to open Ligarview for the accessory (tick "use by default" to skip the question next time).
+     Measured on a Tab S9 over USB 2.0: 0.25 ms round trip, 215 Mbit/s.
    - **Wi-Fi**: open the app and connect to `<mac-ip>:7878` (same network, 5 GHz recommended). Ports 7878 and 7879 must be reachable.
+   - **Developer mode**: `ligarview-host --adb` sets up `adb reverse` tunnels (needs USB debugging); connect to `127.0.0.1:7878`. This replaces the USB accessory transport, the two fight over the device.
+
+   Flags: `--no-usb`, `--no-tcp`, `--adb`.
 
 The app reconnects automatically and remembers the last address. Back returns to the connect screen.
 Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
@@ -66,7 +72,8 @@ Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h
 
 You should not have to restart anything:
 
-- Unplug and replug the USB cable: the host re-creates the `adb reverse` tunnels and the app reconnects.
+- Unplug and replug the USB cable: the host switches the tablet into accessory mode again and the app reconnects (with `--adb`, the tunnels are re-created instead).
+- Restart the host while the tablet waits: the host asks the app whether it wants a stream and the app restarts its session.
 - Silent connection loss (Wi-Fi drop, frozen host): the host sends a heartbeat every second; the app
   treats 4 s of silence as a dead link and reconnects.
 - Tablet sleep/lock: the app reconnects when it comes back to the foreground.
@@ -85,6 +92,9 @@ For a smooth 120 Hz panel on Samsung tablets set Settings > Display > Motion smo
 Adaptive and turn off Power saving.
 
 ## Protocol
+
+Transports: TCP (video on `port`, cursor on `port + 1`) or one USB accessory pipe that carries both as
+channels ([`host/src/usb.rs`](host/src/usb.rs)). The streams inside are identical.
 
 Video: [`host/src/protocol.rs`](host/src/protocol.rs) (a 12-byte hello, then length-prefixed Annex-B H.264 frames).
 Cursor: [`host/src/cursor_server.rs`](host/src/cursor_server.rs).

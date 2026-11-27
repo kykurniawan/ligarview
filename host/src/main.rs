@@ -5,6 +5,8 @@ mod cursor_server;
 mod encoder;
 mod protocol;
 mod server;
+mod tcp;
+mod usb;
 mod virtual_display;
 
 use anyhow::Result;
@@ -58,9 +60,15 @@ struct Args {
     /// Print capture/encode rates once per second
     #[arg(long)]
     stats: bool,
-    /// Do not manage `adb reverse` tunnels automatically
+    /// Also manage `adb reverse` tunnels (developer mode: needs USB debugging and adb)
     #[arg(long)]
-    no_adb: bool,
+    adb: bool,
+    /// Do not use the USB (Android Open Accessory) transport
+    #[arg(long)]
+    no_usb: bool,
+    /// Do not listen for TCP connections (Wi-Fi, adb)
+    #[arg(long)]
+    no_tcp: bool,
     /// Test helper: drop the virtual display after N seconds to exercise recovery
     #[arg(long)]
     debug_drop_display_after: Option<u64>,
@@ -212,13 +220,23 @@ fn main() -> Result<()> {
 
     let dump = a.out.as_ref().map(std::fs::File::create).transpose()?;
     let hello = protocol::Hello { codec: codec.id(), width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
-    server::spawn(a.port, hello, rx, key_request.clone(), dump)?;
-    let mut ports = vec![a.port];
-    if !a.cursor_in_video {
-        cursor_server::spawn(a.port + 1, display_id.clone(), (a.width, a.height))?;
-        ports.push(a.port + 1);
+    let video = server::VideoHub::new(hello, rx, key_request.clone(), dump);
+    let cursor = (!a.cursor_in_video).then(|| cursor_server::CursorHub::new(display_id.clone(), (a.width, a.height)));
+    if !a.no_tcp {
+        tcp::spawn(a.port, video.clone(), cursor.clone())?;
     }
-    if !a.no_adb {
+    // adb and the USB accessory transport fight over the device (the link drops whenever adb
+    // talks to it), and developer mode has no use for the accessory, so --adb replaces it.
+    if !a.no_usb && !a.adb {
+        usb::spawn(video.clone(), cursor.clone());
+    } else if a.adb {
+        println!("adb mode: the USB accessory transport is off");
+    }
+    if a.adb {
+        let mut ports = vec![a.port];
+        if cursor.is_some() {
+            ports.push(a.port + 1);
+        }
         adb::spawn(ports);
     }
 
