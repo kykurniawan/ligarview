@@ -30,7 +30,7 @@
       <a class="primary" href="/docs/install">Get started</a>
       <a class="secondary" href="https://github.com/kykurniawan/ligarview">View on GitHub</a>
     </div>
-    <div class="stage"><Scene /></div>
+    <div class="stage"><div class="glow"></div><div class="panel"><Scene /></div></div>
   </section>
 
   <section class="numbers" aria-label="Measured on a Galaxy Tab S9 and an M1 Pro Mac">
@@ -49,8 +49,8 @@
   </section>
 
   <section class="block">
-    <h2>Two small apps</h2>
-    <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way.</p>
+    <div class="center"><h2>Two small apps</h2>
+    <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way.</p></div>
     <div class="mock">
       <figure class="m1"><MacMockup /><figcaption>The Mac app: status and settings in one small window.</figcaption></figure>
       <figure class="m2"><TabletMockup /><figcaption>The Android app: connection steps, a live preview and recommendations.</figcaption></figure>
@@ -67,7 +67,7 @@
     <p class="more"><a href="/docs/how-it-works">Read the architecture →</a></p>
   </section>
 
-  <section class="block end">
+  <section class="block end center">
     <h2>Get started</h2>
     <p>Build the Mac app and the Android app from source in a few minutes.</p>
     <div class="cta"><a class="primary" href="/docs/install">Read the install guide</a></div>
@@ -76,18 +76,21 @@
 
 <style>
   main { max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
-  .hero { padding-top: clamp(56px, 9vw, 104px); }
+  .hero { padding-top: clamp(56px, 9vw, 104px); text-align: center; }
   .kicker { margin: 0 0 20px; color: var(--accent); font-size: 14px; font-weight: 500; letter-spacing: 0.02em; }
-  h1 { margin: 0; max-width: 16ch; font-size: clamp(38px, 6.4vw, 68px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 650; text-wrap: balance; }
-  .lead { max-width: 56ch; margin: 24px 0 0; color: var(--dim); font-size: clamp(17px, 2vw, 19px); }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-  .primary, .secondary { display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: 10px; font-weight: 550; font-size: 15px; }
-  .primary { background: var(--brand); color: #fff; }
-  .primary:hover { background: #1b5ee8; text-decoration: none; }
+  h1 { margin: 0 auto; max-width: 18ch; font-size: clamp(38px, 6.4vw, 68px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 650; text-wrap: balance; }
+  .lead { max-width: 56ch; margin: 24px auto 0; color: var(--dim); font-size: clamp(17px, 2vw, 19px); }
+  .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 32px; }
+  .primary, .secondary { display: inline-flex; align-items: center; min-height: 46px; padding: 0 24px; border-radius: 999px; font-weight: 550; font-size: 15px; }
+  .primary { background: #fff; color: #0b0d10; }
+  .primary:hover { background: #dfe6f5; text-decoration: none; }
   .secondary { color: var(--text); background: #171c22; }
   .secondary:hover { background: #1f252d; text-decoration: none; }
-  .stage { margin-top: clamp(32px, 5vw, 56px); }
-  .sub { margin: 0; color: var(--dim); max-width: 56ch; }
+  .stage { position: relative; margin-top: clamp(40px, 6vw, 72px); text-align: left; }
+  .glow { position: absolute; inset: -2px; border-radius: 22px; background: conic-gradient(from 210deg, #1250d3, #6e9bff, #b69cff, #4fd1c5, #1250d3); filter: blur(28px); opacity: 0.45; }
+  .panel { position: relative; padding: clamp(12px, 3vw, 32px); border-radius: 20px; background: #0e1013; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }
+  .sub { margin: 0 auto; color: var(--dim); max-width: 56ch; }
+  .center { text-align: center; }
   .mock { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 3vw, 40px); margin-top: 40px; align-items: center; }
   figure { margin: 0; }
   figcaption { margin-top: 14px; color: var(--faint); font-size: 14px; }
@@ -109,6 +112,7 @@
   .more { margin: 24px 0 0; }
   .end { padding-bottom: var(--section); }
   .end p { margin: 8px 0 0; color: var(--dim); }
+  .end .cta { justify-content: center; }
 
   @media (max-width: 900px) { .mock { grid-template-columns: 1fr; } }
   @media (max-width: 720px) {
