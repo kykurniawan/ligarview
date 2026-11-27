@@ -11,16 +11,26 @@
       import('three/addons/geometries/RoundedBoxGeometry.js'),
       import('three/addons/environments/RoomEnvironment.js'),
       import('three/addons/objects/Reflector.js'),
-      import('three/addons/lights/RectAreaLightUniformsLib.js')
+      import('three/addons/lights/RectAreaLightUniformsLib.js'),
+      import('three/addons/loaders/GLTFLoader.js')
     ])
-      .then(([THREE, g, e, r, l]) => {
-        stop = start(THREE, g.RoundedBoxGeometry, e.RoomEnvironment, r.Reflector, l.RectAreaLightUniformsLib);
+      .then(async ([THREE, g, e, r, l, gl]) => {
+        // Optional: a locally supplied laptop model (see site/static/preview). Absent in production.
+        let model = null;
+        try {
+          if ((await fetch('/preview/mac-noUv.glb', { method: 'HEAD' })).ok) {
+            model = (await new gl.GLTFLoader().loadAsync('/preview/mac-noUv.glb')).scene;
+          }
+        } catch {
+          model = null;
+        }
+        stop = start(THREE, g.RoundedBoxGeometry, e.RoomEnvironment, r.Reflector, l.RectAreaLightUniformsLib, model);
       })
       .catch(() => (failed = true));
     return () => stop();
   });
 
-  function start(THREE, RoundedBoxGeometry, RoomEnvironment, Reflector, RectAreaLightUniformsLib) {
+  function start(THREE, RoundedBoxGeometry, RoomEnvironment, Reflector, RectAreaLightUniformsLib, model) {
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     let renderer;
     try {
@@ -131,11 +141,11 @@
     root.add(glow);
 
     // ---------- the extended desktop shared by both screens
-    const MAC = { w: 1280, h: 800 };
+    const MAC = { w: 1280, h: model ? 871 : 800 };
     const TAB = { x: 1400, w: 800, h: 500 };
     const TOTAL = TAB.x + TAB.w;
     const canvasOf = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
-    const macCanvas = canvasOf(1280, 800);
+    const macCanvas = canvasOf(1280, MAC.h);
     const tabCanvas = canvasOf(1024, 640);
     const macCtx = macCanvas.getContext('2d');
     const tabCtx = tabCanvas.getContext('2d');
@@ -300,8 +310,49 @@
     const box = (w, h, d, r, mat) => sh(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)), mat));
 
     // ---------- MacBook
-    const mac = new THREE.Group();
-    const BASE = { w: 4.0, d: 2.7, h: 0.12 };
+    let mac, hinge, macScreen, macGlass, OPEN, BASE, portLocal;
+    if (model) {
+      // a supplied model: "_top" is the lid (hinge at its origin), "_bottom" the base
+      mac = new THREE.Group();
+      hinge = new THREE.Group();
+      const bottom = new THREE.Group();
+      mac.add(hinge, bottom);
+      const logoMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+      const camMat = new THREE.MeshBasicMaterial({ color: '#333333' });
+      const plastic = new THREE.MeshStandardMaterial({ color: '#050505', roughness: 0.85, metalness: 0.6 });
+      for (const child of [...model.children]) {
+        const top = child.name === '_top';
+        (top ? hinge : bottom).add(child);
+        child.traverse((m) => {
+          if (!m.isMesh) return;
+          m.castShadow = m.receiveShadow = true;
+          m.material = { lid: aluminium, base: aluminium, logo: logoMat, camera: camMat }[m.name] ?? plastic;
+        });
+      }
+      const SS = [29.4, 20];
+      macScreen = new THREE.Mesh(new THREE.PlaneGeometry(SS[0], SS[1]), screenMat(macTex));
+      macScreen.position.set(0, 10.5, -0.105);
+      hinge.add(macScreen);
+      macGlass = new THREE.Mesh(new THREE.PlaneGeometry(SS[0], SS[1]), glassOver);
+      macGlass.position.set(0, 10.5, -0.1);
+      hinge.add(macGlass);
+      const keys = new THREE.Mesh(
+        new THREE.PlaneGeometry(27.7, 11.6),
+        new THREE.MeshBasicMaterial({ color: '#ffffff', alphaMap: new THREE.TextureLoader().load('/preview/keyboard-overlay.png'), transparent: true })
+      );
+      keys.rotation.x = -Math.PI / 2;
+      keys.position.set(0, 0.045, 7.21);
+      bottom.add(keys);
+      const lb = new THREE.Box3().setFromObject(bottom);
+      const sc = 4.0 / (lb.max.x - lb.min.x);
+      portLocal = new THREE.Vector3(lb.max.x, lb.min.y + 0.7, (lb.max.z + lb.min.z) / 2 + 3);
+      mac.scale.setScalar(sc);
+      mac.position.set(-2.55 - ((lb.max.x + lb.min.x) / 2) * sc, -lb.min.y * sc, -((lb.max.z + lb.min.z) / 2) * sc);
+      root.add(mac);
+      OPEN = -0.2 * Math.PI;
+    } else {
+    mac = new THREE.Group();
+    BASE = { w: 4.0, d: 2.7, h: 0.12 };
     const base = box(BASE.w, BASE.h, BASE.d, 0.055, aluminium);
     base.position.y = BASE.h / 2 + 0.02;
     mac.add(base);
@@ -375,7 +426,7 @@
     barrel.castShadow = true;
     mac.add(barrel);
 
-    const hinge = new THREE.Group();
+    hinge = new THREE.Group();
     hinge.position.set(0, BASE.h + 0.07, -BASE.d / 2 + 0.07);
     mac.add(hinge);
     const LID = { w: 4.0, h: 2.6, t: 0.06 };
@@ -385,10 +436,10 @@
     const bezel = new THREE.Mesh(new THREE.PlaneGeometry(LID.w - 0.1, LID.h - 0.09), black);
     bezel.position.set(0, LID.h / 2 + 0.02, LID.t / 2 + 0.002);
     hinge.add(bezel);
-    const macScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.375), screenMat(macTex));
+    macScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.375), screenMat(macTex));
     macScreen.position.set(0, LID.h / 2 + 0.02 - 0.025, LID.t / 2 + 0.004);
     hinge.add(macScreen);
-    const macGlass = new THREE.Mesh(new THREE.PlaneGeometry(LID.w - 0.1, LID.h - 0.09), glassOver);
+    macGlass = new THREE.Mesh(new THREE.PlaneGeometry(LID.w - 0.1, LID.h - 0.09), glassOver);
     macGlass.position.set(0, LID.h / 2 + 0.02, LID.t / 2 + 0.006);
     hinge.add(macGlass);
     const notch = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.075), black);
@@ -396,7 +447,9 @@
     hinge.add(notch);
     mac.position.set(-2.55, 0, 0);
     root.add(mac);
-    const OPEN = -0.28;
+    OPEN = -0.28;
+      portLocal = new THREE.Vector3(BASE.w / 2, BASE.h / 2 + 0.02, 0.35);
+    }
 
     // ---------- tablet on a stand
     const tabletRig = new THREE.Group(); // positioned and leaned; holds the tablet and its stand
@@ -443,7 +496,7 @@
 
     // ---------- USB-C cable: braided sleeve, two plugs, a natural sag on the desk
     root.updateMatrixWorld(true);
-    const portMac = mac.localToWorld(new THREE.Vector3(BASE.w / 2 + 0.0, BASE.h / 2 + 0.02, 0.35));
+    const portMac = mac.localToWorld(portLocal.clone());
     const portTab = tablet.localToWorld(new THREE.Vector3(-T.w / 2, -0.5, 0));
     const dirTab = new THREE.Vector3(-1, 0, 0).transformDirection(tablet.matrixWorld).normalize();
     const PLUG = 0.34;
