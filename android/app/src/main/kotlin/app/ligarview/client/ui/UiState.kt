@@ -29,6 +29,15 @@ class UiState(initialHost: String, val startOnWifiTab: Boolean) {
     /** True once a stream was live in this session; tells "waiting for the Mac" from "connection lost". */
     var everConnected by mutableStateOf(false)
 
+    /** True while the picture fills the screen; otherwise it is the small preview on the information screen. */
+    var fullscreen by mutableStateOf(false)
+
+    /** Resolution, frame rate and codec of the stream, once connected. */
+    var streamInfo by mutableStateOf("")
+
+    /** One line of live numbers (fps, bitrate, decode time) while streaming. */
+    var liveStats by mutableStateOf("")
+
     /** Stream description (Connected) or the reason of the last failure (Retrying). */
     var detail by mutableStateOf("")
     var hostText by mutableStateOf(initialHost)
@@ -38,6 +47,10 @@ class UiState(initialHost: String, val startOnWifiTab: Boolean) {
 class Actions(
     val connect: () -> Unit,
     val connectUsb: () -> Unit,
+    val disconnect: () -> Unit,
+    val openFullscreen: () -> Unit,
+    /** Reports where the preview box is (pixels, in the root view), so the video can be placed behind it. */
+    val onPreviewBounds: (left: Float, top: Float, width: Float, height: Float) -> Unit,
     val openDisplaySettings: () -> Unit,
     val openBatterySaver: () -> Unit,
     val openBatteryOptimization: () -> Unit,

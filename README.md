@@ -70,14 +70,18 @@ Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h
 
 ## The Android app
 
-<img src="docs/info-screen.png" alt="The information screen" width="720">
+<img src="docs/info-screen.png" alt="The information screen while streaming" width="720">
 
-While nothing is streaming the app shows what it is doing and how to connect (USB steps with a live
-"cable detected" indicator, or a Wi-Fi address), plus recommendations that are read from the tablet itself:
-whether the high refresh rate is on, whether power saving is off (it lowers the refresh rate and slows the
-decoder), and whether Android may close the app in the background. Each one has a button to the right
-settings page. The screen fades away as soon as the picture starts. It is built with Jetpack Compose; the
-picture itself is a `SurfaceView` fed by the hardware decoder.
+The app opens on an information screen and returns to it with Back. On the left: what the tablet is
+doing (waiting, cable detected, connecting, streaming with live fps, bitrate and decode time) and a small
+live preview of the Mac screen, with the Mac's cursor drawn in it. Tap the preview for full screen; Back
+returns to the screen above. On the right: how to connect (USB steps with a live "cable detected"
+indicator, or a Wi-Fi address) and recommendations read from the tablet itself: whether the high refresh
+rate is on, whether power saving is off (it lowers the refresh rate and slows the decoder), and whether
+Android may close the app in the background. Each one links to the right settings page.
+
+It is built with Jetpack Compose. The picture is a `SurfaceView` fed by the hardware decoder; it is moved
+and resized between the preview box and the full screen, never recreated, so the stream keeps running.
 
 ## Recovery
 

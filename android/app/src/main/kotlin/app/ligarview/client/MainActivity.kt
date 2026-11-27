@@ -5,7 +5,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.graphics.Color
+import android.graphics.RectF
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.provider.Settings
@@ -17,7 +21,9 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
+import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -31,12 +37,14 @@ import app.ligarview.client.ui.LigarviewTheme
 import app.ligarview.client.ui.LinkPhase
 import app.ligarview.client.ui.Transport
 import app.ligarview.client.ui.UiState
+import kotlin.math.roundToInt
 
 /**
  * Hosts the live picture (a SurfaceView fed by the video decoder), the Mac's cursor drawn on top,
  * and a Compose overlay that explains how to connect and what to adjust while nothing is streaming.
  */
 class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
+    private lateinit var root: FrameLayout
     private lateinit var surfaceView: SurfaceView
     private lateinit var stats: TextView
     private lateinit var statsMirror: ImageView
@@ -60,23 +68,21 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
     private var surfaceReady = false
 
+    // The video view sits behind the Compose screen. On the information screen it is placed exactly
+    // behind the preview box, in full screen it covers everything; moving it never recreates the
+    // surface, so the decoder keeps running.
+    private val previewRect = RectF()
+    private val surfaceRect = RectF()
+    private var surfaceAnimator: ValueAnimator? = null
+    private var cornerRadius = 0f
+
+    /** Back leaves the full screen and returns to the information screen. */
     private val backCallback = object : OnBackPressedCallback(false) {
-        override fun handleOnBackPressed() {
-            wantConnection = false
-            stopClient()
-            state.phase = LinkPhase.Idle
-            state.detail = ""
-            state.everConnected = false
-            setStatsVisible(false)
-        }
+        override fun handleOnBackPressed() = setFullscreen(false)
     }
 
-    /** True while the user wants a connection. Back leaves it and returns to the information screen. */
+    /** True while the user wants a connection. */
     private var wantConnection = false
-        set(value) {
-            field = value
-            backCallback.isEnabled = value
-        }
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -191,11 +197,21 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun buildUi() {
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root = FrameLayout(this).apply { setBackgroundColor(0xFF0E1013.toInt()) }
 
         surfaceView = SurfaceView(this)
         surfaceView.holder.addCallback(this)
-        root.addView(surfaceView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        surfaceView.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, cornerRadius)
+            }
+        }
+        surfaceView.clipToOutline = true
+        // Tiny until the Compose screen reports where the preview box is.
+        root.addView(
+            surfaceView,
+            FrameLayout.LayoutParams(dp(16), dp(10), Gravity.TOP or Gravity.START),
+        )
 
         val cursorView = CursorView(this)
         root.addView(cursorView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -208,6 +224,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
                 wantConnection = true
                 startClient()
             },
+            disconnect = ::disconnect,
+            openFullscreen = { if (state.phase == LinkPhase.Streaming) setFullscreen(true) },
+            onPreviewBounds = ::onPreviewBounds,
             openDisplaySettings = { openSettings(Settings.ACTION_DISPLAY_SETTINGS) },
             openBatterySaver = { openSettings(Settings.ACTION_BATTERY_SAVER_SETTINGS) },
             openBatteryOptimization = { openSettings(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) },
@@ -247,9 +266,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         )
         statsMirror = mirror
         cursorOverlay.mirror = mirror
-        // Long-press the picture to toggle the statistics overlay (only while streaming).
+        // Long-press the full-screen picture to toggle the statistics overlay.
         surfaceView.setOnLongClickListener {
-            if (state.phase != LinkPhase.Streaming) return@setOnLongClickListener false
+            if (!state.fullscreen) return@setOnLongClickListener false
             setStatsVisible(stats.visibility != View.VISIBLE)
             true
         }
@@ -275,6 +294,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
                     val text = "%.0f fps  %.1f Mbps  decode %.1f ms  panel %.0f Hz  cursor %s".format(
                         fps, mbps, c.decodeLatencyMs, hz, if (cursorClient?.connected == true) "on" else "OFF",
                     )
+                    state.liveStats = "%.0f fps · %.1f Mbps · %.0f ms decode".format(fps, mbps, c.decodeLatencyMs)
                     stats.text = text + "\n" + cursorOverlay.debugState()
                     android.util.Log.d("Ligarview", text + " " + cursorOverlay.debugState())
                 }
@@ -282,6 +302,74 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
             surfaceView.postDelayed(this, 1000)
         }
+    }
+
+    private fun onPreviewBounds(left: Float, top: Float, width: Float, height: Float) {
+        previewRect.set(left, top, left + width, top + height)
+        if (!state.fullscreen && surfaceAnimator == null) placeSurface(previewRect, dp(PREVIEW_RADIUS_DP).toFloat())
+    }
+
+    private fun placeSurface(rect: RectF, radius: Float) {
+        surfaceRect.set(rect)
+        cornerRadius = radius
+        val lp = surfaceView.layoutParams as FrameLayout.LayoutParams
+        lp.width = rect.width().roundToInt().coerceAtLeast(1)
+        lp.height = rect.height().roundToInt().coerceAtLeast(1)
+        lp.leftMargin = rect.left.roundToInt()
+        lp.topMargin = rect.top.roundToInt()
+        lp.gravity = Gravity.TOP or Gravity.START
+        surfaceView.layoutParams = lp
+        surfaceView.invalidateOutline()
+        cursorOverlay.setFrame(rect.left, rect.top, rect.width(), rect.height())
+    }
+
+    private fun animateSurfaceTo(target: RectF, radius: Float) {
+        surfaceAnimator?.cancel()
+        val from = RectF(surfaceRect)
+        val fromRadius = cornerRadius
+        val to = RectF(target)
+        surfaceAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280
+            interpolator = PathInterpolator(0.2f, 0f, 0f, 1f)
+            addUpdateListener {
+                val f = it.animatedFraction
+                fun lerp(a: Float, b: Float) = a + (b - a) * f
+                placeSurface(
+                    RectF(lerp(from.left, to.left), lerp(from.top, to.top), lerp(from.right, to.right), lerp(from.bottom, to.bottom)),
+                    lerp(fromRadius, radius),
+                )
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    surfaceAnimator = null
+                }
+            })
+            start()
+        }
+    }
+
+    /** Full screen picture, or the small preview on the information screen. */
+    private fun setFullscreen(value: Boolean) {
+        if (state.fullscreen == value) return
+        state.fullscreen = value
+        backCallback.isEnabled = value
+        if (value) {
+            animateSurfaceTo(RectF(0f, 0f, root.width.toFloat(), root.height.toFloat()), 0f)
+        } else {
+            setStatsVisible(false)
+            animateSurfaceTo(previewRect, dp(PREVIEW_RADIUS_DP).toFloat())
+        }
+    }
+
+    /** Leaves the Mac: stops streaming and returns to the idle information screen. */
+    private fun disconnect() {
+        setFullscreen(false)
+        wantConnection = false
+        stopClient()
+        state.phase = LinkPhase.Idle
+        state.detail = ""
+        state.everConnected = false
+        setStatsVisible(false)
     }
 
     private fun setStatsVisible(visible: Boolean) {
@@ -366,6 +454,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             // A client that was stopped (Back, new connection) may still report a late status.
             if (token !== clientToken) return@runOnUiThread
             if (status == LinkStatus.Connected || status == LinkStatus.Streaming) state.everConnected = true
+            if (status == LinkStatus.Connected) state.streamInfo = detail
+            // If the picture goes away while full screen, show the information screen with the reason.
+            if (status != LinkStatus.Streaming && state.fullscreen) setFullscreen(false)
             state.phase = when (status) {
                 LinkStatus.Connecting -> LinkPhase.Connecting
                 LinkStatus.Connected -> LinkPhase.Connected
@@ -389,6 +480,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             wantConnection = false
             state.phase = LinkPhase.Idle
             state.detail = ""
+            setFullscreen(false)
         }
     }
 
@@ -448,6 +540,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private companion object {
         const val KEEP_AWAKE_GRACE_MS = 60_000L
+        const val PREVIEW_RADIUS_DP = 12
         const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
         const val KEY_TARGET = "target"

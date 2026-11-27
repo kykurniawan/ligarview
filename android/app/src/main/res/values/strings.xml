@@ -15,6 +15,10 @@
     <string name="status_connecting_title">Connecting to your Mac…</string>
     <string name="status_connecting_usb">Over the USB cable</string>
     <string name="status_connecting_net">Reaching %1$s</string>
+    <string name="status_streaming_title">Streaming</string>
+    <string name="status_streaming_body">%1$s · %2$s</string>
+    <string name="transport_usb">USB</string>
+    <string name="transport_wifi">Wi-Fi</string>
     <string name="status_connected_title">Connected</string>
     <string name="status_connected_body">Starting the picture · %1$s</string>
     <string name="status_wait_title">Waiting for your Mac…</string>
@@ -43,8 +47,8 @@
 
     <!-- Recommendations -->
     <string name="section_ready">Before you start</string>
-    <string name="ready_all_set">All set. Your tablet is ready.</string>
-    <string name="ready_summary">%1$d of %2$d recommendations done</string>
+    <string name="ready_all_set">All set</string>
+    <string name="ready_summary">%1$d of %2$d done</string>
 
     <string name="rec_refresh_ok_title">High refresh rate is on</string>
     <string name="rec_refresh_ok_body">The display runs at %1$d Hz, so the cursor and window dragging feel smooth.</string>
@@ -69,6 +73,9 @@
     <string name="rec_cable_title">Use a good cable</string>
     <string name="rec_cable_body">USB 2 is enough. A USB 3 cable and port give extra headroom. The tablet charges over the same cable.</string>
 
-    <string name="footer_tip">While streaming, long-press the picture for statistics. Back returns to this screen.</string>
+    <string name="footer_tip">In full screen, long-press the picture for statistics. Back returns here.</string>
+    <string name="preview_placeholder">The Mac screen appears here</string>
+    <string name="preview_hint">Tap the preview for full screen</string>
+    <string name="action_disconnect">Disconnect</string>
     <string name="footer_version">Version %1$s</string>
 </resources>

@@ -72,6 +72,12 @@ class CursorOverlay(private val view: CursorView, private val root: View) : Chor
     private var shape: Shape? = null
     private var running = false
 
+    // The rectangle the picture occupies: the whole screen, or the small preview.
+    private var frameLeft = 0f
+    private var frameTop = 0f
+    private var frameWidth = 0f
+    private var frameHeight = 0f
+
     /** Debug aid: shows the bitmap currently in use, so a missing cursor can be told apart from a missing bitmap. */
     var mirror: ImageView? = null
 
@@ -80,6 +86,14 @@ class CursorOverlay(private val view: CursorView, private val root: View) : Chor
         val s = shape
         return "cursor[in=$inside shape=${s?.let { "%.3fx%.3f".format(it.w, it.h) } ?: "none"} " +
             "pos=%.3f,%.3f vis=$visible en=$enabled n=$messages fr=$frames]".format(x, y)
+    }
+
+    /** Sets where the picture is; the cursor is drawn relative to it. UI thread only. */
+    fun setFrame(left: Float, top: Float, width: Float, height: Float) {
+        frameLeft = left
+        frameTop = top
+        frameWidth = width
+        frameHeight = height
     }
 
     fun setPosition(x: Float, y: Float, inside: Boolean) {
@@ -108,9 +122,12 @@ class CursorOverlay(private val view: CursorView, private val root: View) : Chor
         if (!running) return
         frames++
         Choreographer.getInstance().postFrameCallback(this)
-        val rootW = root.width.toFloat()
-        val rootH = root.height.toFloat()
-        if (rootW <= 0f || rootH <= 0f) return // not laid out yet
+        if (frameWidth <= 0f || frameHeight <= 0f) {
+            if (root.width <= 0 || root.height <= 0) return // not laid out yet
+            setFrame(0f, 0f, root.width.toFloat(), root.height.toFloat())
+        }
+        val rootW = frameWidth
+        val rootH = frameHeight
 
         pending?.let {
             pending = null
@@ -126,8 +143,8 @@ class CursorOverlay(private val view: CursorView, private val root: View) : Chor
         if (s != null) {
             view.update(
                 s.bitmap,
-                x * rootW - s.hotX * rootW,
-                y * rootH - s.hotY * rootH,
+                frameLeft + x * rootW - s.hotX * rootW,
+                frameTop + y * rootH - s.hotY * rootH,
                 s.w * rootW,
                 s.h * rootH,
                 show,
