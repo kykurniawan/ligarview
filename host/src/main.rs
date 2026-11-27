@@ -269,7 +269,7 @@ fn main() -> Result<()> {
     let cursor = (!a.cursor_in_video).then(|| cursor_server::CursorHub::new(display_id.clone(), (a.width, a.height)));
     {
         let c = config::Config::load();
-        access::init(c.sharing || !gui, c.code);
+        access::init(c.sharing || !gui, c.code, c.tablet);
     }
     if !a.no_tcp {
         tcp::spawn(a.port, video.clone(), cursor.clone())?;

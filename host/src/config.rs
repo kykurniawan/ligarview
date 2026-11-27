@@ -13,11 +13,13 @@ pub struct Config {
     pub sharing: bool,
     /// Code of the paired tablet, which it must send over Wi-Fi; 0 while nothing is paired.
     pub code: u32,
+    /// Name of the paired tablet, for display.
+    pub tablet: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0 }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new() }
     }
 }
 
@@ -38,6 +40,7 @@ impl Config {
                 ("codec", v) => c.hevc = v == "hevc",
                 ("sharing", v) => c.sharing = v != "off",
                 ("code", v) => c.code = v.parse().unwrap_or(0),
+                ("tablet", v) => c.tablet = v.to_string(),
                 _ => {}
             }
         }
@@ -50,13 +53,14 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
             if self.hevc { "hevc" } else { "h264" },
             if self.sharing { "on" } else { "off" },
-            self.code
+            self.code,
+            self.tablet.replace('\n', " ")
         );
         let _ = std::fs::write(p, text);
     }

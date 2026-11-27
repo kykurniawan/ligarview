@@ -121,13 +121,16 @@ struct Gui {
     code_field: Retained<NSTextField>,
     message: Retained<NSTextField>,
     tablets_shown: Vec<String>,
+    tablet_row: Retained<NSStackView>,
+    code_row: Retained<NSStackView>,
+    unpair: Retained<NSButton>,
     login: Retained<NSButton>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
     quality: Retained<NSPopUpButton>,
     codec: Retained<NSPopUpButton>,
     config: Config,
-    shown: Option<(Status, bool, u32)>,
+    shown: Option<(Status, bool, bool, String)>,
 }
 
 thread_local! {
@@ -327,6 +330,9 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             code_field,
             message,
             tablets_shown: Vec::new(),
+            tablet_row,
+            code_row,
+            unpair,
             login,
             orientation,
             fps,
@@ -414,25 +420,31 @@ pub fn tick(status: Status) {
             gui.message.setStringValue(&s(&m));
         }
         gui.sharing.setTitle(&s(if status == Status::Off { "Start sharing" } else { "Stop sharing" }));
-        if gui.shown != Some((status, access, gui.config.code)) {
-            gui.shown = Some((status, access, gui.config.code));
+        let paired = crate::access::code() != 0;
+        let name = crate::access::tablet();
+        if gui.shown != Some((status, access, paired, name.clone())) {
+            gui.shown = Some((status, access, paired, name.clone()));
+            let who = if name.is_empty() { "the tablet".to_string() } else { name.clone() };
             let (text, color) = match (status, access) {
                 (Status::Off, _) => ("Sharing is off", NSColor::systemOrangeColor()),
                 (_, false) => ("Needs Screen Recording permission", NSColor::systemOrangeColor()),
                 (Status::Starting, _) => ("Starting…", NSColor::secondaryLabelColor()),
-                (Status::Waiting, _) => ("Waiting for the tablet", NSColor::secondaryLabelColor()),
-                (Status::Streaming, _) => ("Streaming to the tablet", NSColor::systemGreenColor()),
+                (Status::Waiting, _) if paired => (&*format!("Waiting for {who}"), NSColor::secondaryLabelColor()),
+                (Status::Waiting, _) => ("Not paired yet", NSColor::secondaryLabelColor()),
+                (Status::Streaming, _) => (&*format!("Streaming to {who}"), NSColor::systemGreenColor()),
             };
             gui.status.setStringValue(&s(text));
             gui.status.setTextColor(Some(&color));
-            let was_hidden = gui.permission_row.isHidden();
+            // Pairing controls only matter while nothing is paired; Unpair only while something is.
             gui.permission_row.setHidden(access);
-            if was_hidden == access {
-                // The window grows or shrinks with the notice.
-                if let Some(root) = gui.window.contentView() {
-                    let size = root.fittingSize();
-                    gui.window.setContentSize(NSSize { width: size.width.max(380.0), height: size.height });
-                }
+            gui.tablet_row.setHidden(paired);
+            gui.code_row.setHidden(paired);
+            gui.message.setHidden(paired);
+            gui.unpair.setHidden(!paired);
+            // The window grows or shrinks with what is shown.
+            if let Some(root) = gui.window.contentView() {
+                let size = root.fittingSize();
+                gui.window.setContentSize(NSSize { width: size.width.max(380.0), height: size.height });
             }
         }
         gui.login.setState(if login_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
@@ -453,12 +465,15 @@ impl Gui {
                 self.config.sharing = !crate::access::enabled();
                 crate::access::set_enabled(self.config.sharing);
                 self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
                 self.config.save();
                 return;
             }
             Control::Unpair => {
                 crate::access::set_code(0);
+                crate::access::set_tablet(String::new());
                 self.config.code = 0;
+                self.config.tablet = String::new();
                 self.config.save();
                 self.message.setStringValue(&s("Unpaired. Pair a tablet again with the code it shows."));
                 return;
@@ -492,6 +507,7 @@ impl Gui {
         }
         let _ = (&self.orientation, &self.fps, &self.quality, &self.codec);
         self.config.code = crate::access::code();
+        self.config.tablet = crate::access::tablet();
         self.config.sharing = crate::access::enabled();
         if self.config != before {
             self.config.save();

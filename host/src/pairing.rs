@@ -132,9 +132,11 @@ pub fn pair(name: String, code: u32) {
             return say("Wrong code. Check the code on the tablet.");
         }
         crate::access::set_code(code);
+        crate::access::set_tablet(name.clone());
         crate::access::set_enabled(true);
         let mut c = crate::config::Config::load();
         c.code = code;
+        c.tablet = name.clone();
         c.sharing = true;
         c.save();
         say(format!("Paired with {name}."));
