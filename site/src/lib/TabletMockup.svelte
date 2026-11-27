@@ -1,5 +1,5 @@
 <!-- A static rendition of the Ligarview information screen on a tablet. -->
-<div class="tablet" role="img" aria-label="The Ligarview Android app: connection status, live preview and recommendations">
+<div class="device"><span class="btn"></span><span class="btn b2"></span><div class="tablet" role="img" aria-label="The Ligarview Android app: connection status, live preview and recommendations">
   <div class="screen">
     <div class="left">
       <div class="brand"><img src="/logo.png" alt="" width="34" height="34" /><div><b>Ligarview</b><small>Use this tablet as a second display for your Mac.</small></div></div>
@@ -25,11 +25,15 @@
       </ul>
     </div>
   </div>
-</div>
+</div></div>
 
 <style>
-  .tablet { padding: clamp(8px, 1.4vw, 14px); border-radius: clamp(16px, 2.4vw, 28px); background: #1b2128; }
-  .screen { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(14px, 3vw, 36px); padding: clamp(16px, 3vw, 36px); border-radius: clamp(10px, 1.6vw, 18px); background: #0e1013; color: #ecf0f4; font-size: clamp(9px, 1.15vw, 13px); aspect-ratio: 16 / 10; overflow: hidden; }
+  .device { container-type: inline-size; position: relative; filter: drop-shadow(0 28px 36px rgba(0, 0, 0, 0.45)); }
+  .btn { position: absolute; top: 18%; right: -3px; width: 3px; height: 9%; border-radius: 0 3px 3px 0; background: #2a3038; }
+  .b2 { top: 31%; height: 5%; }
+  .tablet { position: relative; padding: clamp(9px, 1.5vw, 16px); border-radius: clamp(18px, 2.8vw, 32px); background: linear-gradient(145deg, #3a414b, #20252c); box-shadow: inset 0 0 0 1px #4a525d; }
+  .tablet::before { content: ''; position: absolute; top: 50%; left: clamp(3px, 0.5vw, 6px); width: clamp(4px, 0.6vw, 7px); height: clamp(4px, 0.6vw, 7px); border-radius: 50%; background: #0a0c0f; transform: translateY(-50%); }
+  .screen { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(14px, 3vw, 36px); padding: clamp(16px, 3vw, 36px); border-radius: clamp(10px, 1.6vw, 18px); background: #0e1013; color: #ecf0f4; font-size: 1.9cqw; aspect-ratio: 16 / 10; overflow: hidden; }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand img { border-radius: 8px; width: 2.6em; height: 2.6em; }
   .brand div { display: grid; }
@@ -51,5 +55,5 @@
   ul li { grid-template-columns: 1.2em 1fr; gap: 0.8em; align-items: start; }
   ul i { width: 0.7em; height: 0.7em; border-radius: 50%; margin-top: 0.4em; }
   .g { background: #4ade80; } .y { background: #f5b73b; }
-  @media (max-width: 640px) { .right ul li:nth-child(3), .right .sec { display: none; } }
+  
 </style>

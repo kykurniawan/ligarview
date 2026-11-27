@@ -51,9 +51,19 @@
   <section class="block">
     <div class="center"><h2>Two small apps</h2>
     <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way.</p></div>
-    <div class="mock">
-      <figure class="m1"><MacMockup /><figcaption>The Mac app: status and settings in one small window.</figcaption></figure>
-      <figure class="m2"><TabletMockup /><figcaption>The Android app: connection steps, a live preview and recommendations.</figcaption></figure>
+    <div class="show">
+      <MacMockup />
+      <div class="copy">
+        <h3>The Mac app</h3>
+        <p>A single small window shows the connection state and the display in use. Choose orientation, frame rate, quality and codec, start it at login, and close the window: the host keeps running.</p>
+      </div>
+    </div>
+    <div class="show flip">
+      <TabletMockup />
+      <div class="copy">
+        <h3>The Android app</h3>
+        <p>Connection steps with a live cable indicator, a preview of the Mac screen you can open full screen, and recommendations read from the tablet itself: refresh rate, power saving and background limits.</p>
+      </div>
     </div>
   </section>
 
@@ -91,9 +101,11 @@
   .panel { position: relative; padding: clamp(12px, 3vw, 32px); border-radius: 20px; background: #0e1013; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }
   .sub { margin: 0 auto; color: var(--dim); max-width: 56ch; }
   .center { text-align: center; }
-  .mock { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 3vw, 40px); margin-top: 40px; align-items: center; }
-  figure { margin: 0; }
-  figcaption { margin-top: 14px; color: var(--faint); font-size: 14px; }
+  .show { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: clamp(28px, 5vw, 72px); align-items: center; margin-top: clamp(48px, 7vw, 88px); }
+  .show.flip { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+  .show.flip > :global(.device) { order: 2; }
+  .copy h3 { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .copy p { margin: 0; color: var(--dim); max-width: 44ch; }
 
   .numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: var(--section); padding-block: 40px; border-block: 1px solid var(--line); }
   .numbers strong { display: block; font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.02em; font-weight: 600; }
@@ -114,7 +126,7 @@
   .end p { margin: 8px 0 0; color: var(--dim); }
   .end .cta { justify-content: center; }
 
-  @media (max-width: 900px) { .mock { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .show, .show.flip { grid-template-columns: 1fr; } .show.flip > :global(.device) { order: 0; } }
   @media (max-width: 720px) {
     .numbers { grid-template-columns: repeat(2, 1fr); }
     .rows li, .steps li div { grid-template-columns: 1fr; gap: 8px; }
