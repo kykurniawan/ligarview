@@ -1,9 +1,12 @@
 <script>
+  import Scene from '$lib/Scene.svelte';
+  import MacMockup from '$lib/MacMockup.svelte';
+  import TabletMockup from '$lib/TabletMockup.svelte';
   const features = [
-    ['A real extended display', 'Not a mirror. macOS sees a second monitor you can arrange, drag windows onto and run at HiDPI, like a Retina screen.'],
-    ['USB without USB debugging', 'Plug the cable in and accept one prompt on the tablet. No developer mode, no adb. Wi-Fi works too.'],
-    ['Built for low latency', 'Hardware H.264 or HEVC on both ends. The cursor is drawn on the tablet, so it never waits for the video.'],
-    ['Nothing extra', 'No touch input, no audio, no account. The tablet is a monitor, and that is all it does.']
+    ['A real extended display', 'Not a mirror. macOS recognizes a second monitor that you can arrange, drag windows onto and run at HiDPI, just like a Retina screen.'],
+    ['USB without USB debugging', 'Connect the cable and accept a single prompt on the tablet. No developer mode and no adb. Wi-Fi is supported as well.'],
+    ['Built for low latency', 'Hardware H.264 or HEVC encoding and decoding. The cursor is rendered on the tablet itself, so it never waits for the video.'],
+    ['Nothing extra', 'No touch input, no audio and no account. The tablet is a monitor, and it does that one job well.']
   ];
   const numbers = [
     ['0.25 ms', 'USB round trip'],
@@ -12,9 +15,9 @@
     ['215 Mbit/s', 'over plain USB 2.0']
   ];
   const steps = [
-    ['Start the host on your Mac', 'Ligarview.app creates the extra display and waits for the tablet.'],
-    ['Plug in the tablet', 'The host switches it into accessory mode and Android offers to open the app.'],
-    ['Use it', 'Drag a window over. Tap the preview for full screen, Back to return.']
+    ['Launch the Mac app', 'Ligarview creates the extra display and waits for the tablet.'],
+    ['Connect the tablet', 'The Mac switches it into accessory mode and Android offers to open the app.'],
+    ['Start working', 'Drag a window across. Tap the preview for full screen and press Back to return.']
   ];
 </script>
 
@@ -22,12 +25,12 @@
   <section class="hero">
     <p class="kicker">Open source · macOS + Android</p>
     <h1>Your Android tablet, as a second Mac display.</h1>
-    <p class="lead">Ligarview is Sidecar for people without an iPad. It turns a tablet into a real extended monitor over USB or Wi-Fi, with a Rust host and a native Kotlin app.</p>
+    <p class="lead">Ligarview brings Sidecar-style extended displays to Android. Connect a tablet over USB or Wi-Fi and use it as a genuine second monitor, powered by a Rust host and a native Kotlin app.</p>
     <div class="cta">
       <a class="primary" href="/docs/install">Get started</a>
       <a class="secondary" href="https://github.com/kykurniawan/ligarview">View on GitHub</a>
     </div>
-    <img class="shot" src="/info-screen.png" alt="The Ligarview Android app while streaming: status, a live preview of the Mac screen, connection steps and recommendations" width="1600" height="1000" />
+    <div class="stage"><Scene /></div>
   </section>
 
   <section class="numbers" aria-label="Measured on a Galaxy Tab S9 and an M1 Pro Mac">
@@ -46,6 +49,15 @@
   </section>
 
   <section class="block">
+    <h2>Two small apps</h2>
+    <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way.</p>
+    <div class="mock">
+      <figure class="m1"><MacMockup /><figcaption>The Mac app: status and settings in one small window.</figcaption></figure>
+      <figure class="m2"><TabletMockup /><figcaption>The Android app: connection steps, a live preview and recommendations.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="block">
     <h2>How it works</h2>
     <ol class="rows steps">
       {#each steps as [title, body], i}
@@ -56,9 +68,9 @@
   </section>
 
   <section class="block end">
-    <h2>Ready when you are</h2>
-    <p>Build the host and the app from source in a few minutes.</p>
-    <div class="cta"><a class="primary" href="/docs/install">Install guide</a></div>
+    <h2>Get started</h2>
+    <p>Build the Mac app and the Android app from source in a few minutes.</p>
+    <div class="cta"><a class="primary" href="/docs/install">Read the install guide</a></div>
   </section>
 </main>
 
@@ -74,7 +86,11 @@
   .primary:hover { background: #1b5ee8; text-decoration: none; }
   .secondary { color: var(--text); background: #171c22; }
   .secondary:hover { background: #1f252d; text-decoration: none; }
-  .shot { display: block; width: 100%; height: auto; margin-top: clamp(40px, 6vw, 72px); border-radius: 14px; }
+  .stage { margin-top: clamp(32px, 5vw, 56px); }
+  .sub { margin: 0; color: var(--dim); max-width: 56ch; }
+  .mock { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 3vw, 40px); margin-top: 40px; align-items: center; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; color: var(--faint); font-size: 14px; }
 
   .numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: var(--section); padding-block: 40px; border-block: 1px solid var(--line); }
   .numbers strong { display: block; font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.02em; font-weight: 600; }
@@ -94,6 +110,7 @@
   .end { padding-bottom: var(--section); }
   .end p { margin: 8px 0 0; color: var(--dim); }
 
+  @media (max-width: 900px) { .mock { grid-template-columns: 1fr; } }
   @media (max-width: 720px) {
     .numbers { grid-template-columns: repeat(2, 1fr); }
     .rows li, .steps li div { grid-template-columns: 1fr; gap: 8px; }
