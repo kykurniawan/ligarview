@@ -244,9 +244,13 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     pair.setTag(Control::Pair as isize);
     let unpair = unsafe { NSButton::buttonWithTitle_target_action(&s("Unpair"), Some(&*handler), Some(sel!(press:)), mtm) };
     unpair.setTag(Control::Unpair as isize);
-    let code_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*code_field as &NSView, &pair, &unpair]), mtm);
+    let code_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*code_field as &NSView, &pair]), mtm);
     code_row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
     code_row.setSpacing(10.0);
+    let sharing_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*sharing as &NSView, &unpair]), mtm);
+    sharing_row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
+    sharing_row.setSpacing(10.0);
+    tablet.widthAnchor().constraintGreaterThanOrEqualToConstant(170.0).setActive(true);
     let message = label(mtm, "Open Ligarview on the tablet, then enter the code it shows.");
     message.setTextColor(Some(&NSColor::tertiaryLabelColor()));
     message.setFont(Some(&NSFont::systemFontOfSize(11.0)));
@@ -272,7 +276,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
     ];
-    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing, &tablet_row, &code_row, &message];
+    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing_row, &tablet_row, &code_row, &message];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
     views.push(&hint);
@@ -289,7 +293,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let window = unsafe {
         NSWindow::initWithContentRect_styleMask_backing_defer(
             mtm.alloc(),
-            NSRect { origin: NSPoint { x: 0.0, y: 0.0 }, size: NSSize { width: size.width.max(340.0), height: size.height } },
+            NSRect { origin: NSPoint { x: 0.0, y: 0.0 }, size: NSSize { width: size.width.max(380.0), height: size.height } },
             NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable,
             NSBackingStoreType::Buffered,
             false,
@@ -397,8 +401,12 @@ pub fn tick(status: Status) {
             for t in &tablets {
                 gui.tablet.addItemWithTitle(&s(t));
             }
+            gui.tablet.selectItemAtIndex(0);
             if let Some(k) = keep {
-                gui.tablet.selectItemWithTitle(&s(&k));
+                let i = gui.tablet.indexOfItemWithTitle(&s(&k));
+                if i >= 0 {
+                    gui.tablet.selectItemAtIndex(i);
+                }
             }
             gui.tablets_shown = tablets;
         }
@@ -423,7 +431,7 @@ pub fn tick(status: Status) {
                 // The window grows or shrinks with the notice.
                 if let Some(root) = gui.window.contentView() {
                     let size = root.fittingSize();
-                    gui.window.setContentSize(NSSize { width: size.width.max(340.0), height: size.height });
+                    gui.window.setContentSize(NSSize { width: size.width.max(380.0), height: size.height });
                 }
             }
         }

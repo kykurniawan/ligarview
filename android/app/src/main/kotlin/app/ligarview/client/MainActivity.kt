@@ -449,11 +449,14 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun newCode() = (100_000 + java.security.SecureRandom().nextInt(900_000)).toString()
 
     /** The Mac accepted this tablet's code: remember it as the secret and connect right away. */
-    private fun onPaired(host: String, port: Int, code: Int) {
+    private fun onPaired(host: String?, port: Int, code: Int) {
         prefs().edit().putString(KEY_SECRET, code.toString()).apply()
         state.pairingCode = newCode()
-        found = FoundMac("Mac", host, port)
-        state.foundMac = found?.name
+        // Keep the Mac Bonjour found unless the pairing connection gave a usable address.
+        if (host != null && found?.host != host) {
+            found = FoundMac(found?.name ?: "Mac", host, port)
+            state.foundMac = found?.name
+        }
         userStopped = false
         state.everConnected = false
         wantConnection = true

@@ -34,8 +34,16 @@ fn say(text: impl Into<String>) {
 /// Keeps the list of tablets on the network up to date.
 pub fn start_browse() {
     std::thread::spawn(|| loop {
-        let child = Command::new("dns-sd")
-            .args(["-B", TABLET_TYPE, "local."])
+        // `script` gives dns-sd a terminal, so its output arrives line by line instead of in big blocks.
+        // The wrapper shell stops the browser when the host exits, so none are left behind.
+        let child = Command::new("sh")
+            .args([
+                "-c",
+                "script -q /dev/null dns-sd -B \"$1\" local. & pid=$!; \
+                 while kill -0 $PPID 2>/dev/null; do sleep 2; done; kill $pid",
+                "sh",
+                TABLET_TYPE,
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -103,7 +111,12 @@ pub fn pair(name: String, code: u32) {
             .trim_end_matches('.')
             .to_socket_addrs()
             .ok()
-            .and_then(|mut it| it.find_map(|a| TcpStream::connect_timeout(&a, Duration::from_secs(3)).ok()))
+            .and_then(|it| {
+                // IPv4 first: the tablet connects back to the address it sees here, and the host listens on IPv4.
+                let mut addrs: Vec<_> = it.collect();
+                addrs.sort_by_key(|a| a.is_ipv6());
+                addrs.into_iter().find_map(|a| TcpStream::connect_timeout(&a, Duration::from_secs(3)).ok())
+            })
         else {
             return say(format!("Could not reach {name}."));
         };

@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
 class PairingServer(
     context: Context,
     private val currentCode: () -> String,
-    private val onPaired: (host: String, port: Int, code: Int) -> Unit,
+    private val onPaired: (host: String?, port: Int, code: Int) -> Unit,
 ) {
     private val nsd = context.getSystemService(NsdManager::class.java)
     private val main = Handler(Looper.getMainLooper())
@@ -89,8 +89,9 @@ class PairingServer(
                 write(if (ok) 1 else 0)
                 flush()
             }
-            val host = (it.remoteSocketAddress as? java.net.InetSocketAddress)?.address?.hostAddress
-            if (ok && host != null) main.post { onPaired(host, port, code) }
+            // Only an IPv4 address is usable: the host listens on IPv4 and Bonjour supplies the rest.
+            val host = ((it.remoteSocketAddress as? java.net.InetSocketAddress)?.address as? java.net.Inet4Address)?.hostAddress
+            if (ok) main.post { onPaired(host, port, code) }
         }
     }
 
