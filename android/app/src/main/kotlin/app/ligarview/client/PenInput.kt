@@ -12,6 +12,7 @@ import java.nio.ByteBuffer
 class PenInput(
     private val enabled: () -> Boolean,
     private val send: (ByteArray) -> Unit,
+    private val onStrokeEnd: () -> Unit = {},
 ) {
     fun onTouch(view: View, e: MotionEvent): Boolean {
         if (!isPen(e) || !enabled()) return false
@@ -24,8 +25,14 @@ class PenInput(
                 }
                 emit(ACT_MOVE, view, e, e.x, e.y, e.pressure)
             }
-            MotionEvent.ACTION_UP -> emit(ACT_UP, view, e, e.x, e.y, 0f)
-            MotionEvent.ACTION_CANCEL -> emit(ACT_CANCEL, view, e, e.x, e.y, 0f)
+            MotionEvent.ACTION_UP -> {
+                emit(ACT_UP, view, e, e.x, e.y, 0f)
+                onStrokeEnd()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                emit(ACT_CANCEL, view, e, e.x, e.y, 0f)
+                onStrokeEnd()
+            }
             else -> return false
         }
         return true

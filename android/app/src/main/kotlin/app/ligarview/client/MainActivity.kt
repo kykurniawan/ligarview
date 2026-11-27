@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** Identifies the running client; status reports from a stopped one are ignored. */
     private var clientToken: Any? = null
     private var cursorClient: CursorClient? = null
+    private var sidebar: Sidebar? = null
     private lateinit var usbManager: UsbManager
     private var usbLink: UsbLink? = null
     private lateinit var permissionIntent: PendingIntent
@@ -293,9 +294,13 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             true
         }
         // The S Pen controls the Mac's pointer in full screen (the host must allow it).
+        val sidebar = Sidebar(this) { cursorClient?.sendInput(it) }
+        this.sidebar = sidebar
+        root.addView(sidebar.container, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val pen = PenInput(
             enabled = { state.fullscreen && cursorClient?.canSendInput == true },
             send = { cursorClient?.sendInput(it) },
+            onStrokeEnd = sidebar::strokeEnded,
         )
         val fingers = FingerScroll(
             enabled = { state.fullscreen && cursorClient?.canSendInput == true },
@@ -338,6 +343,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
                 lastFrames = frames; lastBytes = bytes; lastTime = now
             }
+            sidebar?.setAvailable(state.fullscreen && cursorClient?.canSendInput == true)
             surfaceView.postDelayed(this, 1000)
         }
     }

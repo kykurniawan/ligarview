@@ -16,6 +16,11 @@
 //!       dx, dy  movement since the last message, as a fraction of the display (a finger drag
 //!               moves the content by the same distance, like a trackpad with natural scrolling)
 //!
+//!   3 Modifiers: mask u8      (bit 0 Cmd, 1 Shift, 2 Ctrl, 3 Option; the keys the tablet's sidebar
+//!       holds right now. They are added to every pointer and scroll event until the next message.)
+//!   4 Key: keycode u16 | mask u8   (press and release one key with the modifiers in `mask`;
+//!       only Escape and Z, for Esc, Undo and Redo, are accepted)
+//!
 //! Nothing is injected unless the user switched on "Allow pen control" (pointer) or "Allow
 //! finger scrolling" (scroll) in the window and macOS granted the Accessibility permission.
 
@@ -27,6 +32,8 @@ use std::time::{Duration, Instant};
 
 pub const MSG_POINTER: u8 = 1;
 pub const MSG_SCROLL: u8 = 2;
+pub const MSG_MODIFIERS: u8 = 3;
+pub const MSG_KEY: u8 = 4;
 const POINTER_LEN: usize = 16;
 const SCROLL_LEN: usize = 18;
 
@@ -94,6 +101,47 @@ pub fn parse_scroll(body: &[u8]) -> Option<Scroll> {
     (s.phase <= PH_CANCEL).then_some(s)
 }
 
+const MOD_CMD: u8 = 1;
+const MOD_SHIFT: u8 = 2;
+const MOD_CTRL: u8 = 4;
+const MOD_OPTION: u8 = 8;
+const MOD_ALL: u8 = MOD_CMD | MOD_SHIFT | MOD_CTRL | MOD_OPTION;
+
+const KEY_ESCAPE: u16 = 53;
+const KEY_Z: u16 = 6;
+
+pub fn parse_modifiers(body: &[u8]) -> Option<u8> {
+    (body.len() == 2 && body[0] == MSG_MODIFIERS).then(|| body[1] & MOD_ALL)
+}
+
+/// (keycode, modifier mask). Only the keys behind the sidebar's buttons are accepted: the tablet
+/// is not allowed to type arbitrary text on the Mac.
+pub fn parse_key(body: &[u8]) -> Option<(u16, u8)> {
+    if body.len() != 4 || body[0] != MSG_KEY {
+        return None;
+    }
+    let key = u16::from_be_bytes([body[1], body[2]]);
+    matches!(key, KEY_ESCAPE | KEY_Z).then_some((key, body[3] & MOD_ALL))
+}
+
+/// Quartz event flag bits for a modifier mask.
+fn flags_for(mask: u8) -> u64 {
+    let mut f = 0;
+    if mask & MOD_SHIFT != 0 {
+        f |= 0x0002_0000;
+    }
+    if mask & MOD_CTRL != 0 {
+        f |= 0x0004_0000;
+    }
+    if mask & MOD_OPTION != 0 {
+        f |= 0x0008_0000;
+    }
+    if mask & MOD_CMD != 0 {
+        f |= 0x0010_0000;
+    }
+    f
+}
+
 // Quartz event types and fields.
 const LEFT_DOWN: u32 = 1;
 const LEFT_UP: u32 = 2;
@@ -129,6 +177,9 @@ extern "C" {
     fn CGEventSetIntegerValueField(event: *mut (), field: u32, value: i64);
     fn CGEventSetDoubleValueField(event: *mut (), field: u32, value: f64);
     fn CGEventCreateScrollWheelEvent(source: *const (), units: u32, wheel_count: u32, wheel1: i32, wheel2: i32) -> *mut ();
+    fn CGEventCreateKeyboardEvent(source: *const (), keycode: u16, down: bool) -> *mut ();
+    fn CGEventGetFlags(event: *mut ()) -> u64;
+    fn CGEventSetFlags(event: *mut (), flags: u64);
     fn CGEventPost(tap: u32, event: *mut ());
     fn CFRelease(cf: *const std::ffi::c_void);
 }
@@ -189,6 +240,9 @@ pub fn open_accessibility_settings() {
         .spawn();
 }
 
+/// Modifier keys the tablet's sidebar is holding.
+static MODIFIERS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
 static DISPLAY: OnceLock<Arc<AtomicU32>> = OnceLock::new();
 static WARNED: AtomicBool = AtomicBool::new(false);
 static DENIED_LOGGED: AtomicBool = AtomicBool::new(false);
@@ -221,8 +275,31 @@ fn post(kind: u32, at: CGPoint, button: u32, clicks: i64, pressure: f64) {
             CGEventSetIntegerValueField(e, FIELD_CLICK_STATE, clicks);
         }
         CGEventSetDoubleValueField(e, FIELD_PRESSURE, pressure);
+        add_modifiers(e);
         CGEventPost(HID_EVENT_TAP, e);
         CFRelease(e as *const std::ffi::c_void);
+    }
+}
+
+/// Adds the sidebar's modifiers to the keys the Mac itself reports as held.
+unsafe fn add_modifiers(e: *mut ()) {
+    let held = flags_for(MODIFIERS.load(Ordering::Relaxed));
+    if held != 0 {
+        CGEventSetFlags(e, CGEventGetFlags(e) | held);
+    }
+}
+
+fn post_key(keycode: u16, mask: u8) {
+    unsafe {
+        for down in [true, false] {
+            let e = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
+            if e.is_null() {
+                return;
+            }
+            CGEventSetFlags(e, flags_for(mask));
+            CGEventPost(HID_EVENT_TAP, e);
+            CFRelease(e as *const std::ffi::c_void);
+        }
     }
 }
 
@@ -233,6 +310,7 @@ fn post_scroll(dx: i32, dy: i32) {
             return;
         }
         CGEventSetIntegerValueField(e, FIELD_SCROLL_CONTINUOUS, 1);
+        add_modifiers(e);
         CGEventPost(HID_EVENT_TAP, e);
         CFRelease(e as *const std::ffi::c_void);
     }
@@ -240,14 +318,41 @@ fn post_scroll(dx: i32, dy: i32) {
 
 /// Lifts a button that is still held, e.g. when the tablet disconnects mid-stroke.
 pub fn release_all() {
+    MODIFIERS.store(0, Ordering::Relaxed);
     let mut st = STATE.lock().unwrap();
     if let (Some(button), Some(at)) = (st.held.take(), st.last_at) {
         post(if button == BUTTON_RIGHT { RIGHT_UP } else { LEFT_UP }, at, button, st.clicks, 0.0);
     }
 }
 
+/// Sidebar messages: sticky modifiers and the few allowed keys.
+fn handle_keys(body: &[u8]) {
+    let modifiers = parse_modifiers(body);
+    let key = parse_key(body);
+    if modifiers.is_none() && key.is_none() {
+        return;
+    }
+    if !access::enabled() || !access::control_enabled() {
+        // Never leave modifiers stuck on while control is off.
+        MODIFIERS.store(0, Ordering::Relaxed);
+        return;
+    }
+    if !trusted() {
+        return;
+    }
+    if let Some(mask) = modifiers {
+        MODIFIERS.store(mask, Ordering::Relaxed);
+    }
+    if let Some((keycode, mask)) = key {
+        post_key(keycode, mask);
+    }
+}
+
 /// Applies one message body from the tablet.
 pub fn handle(body: &[u8]) {
+    if matches!(body.first(), Some(&MSG_MODIFIERS) | Some(&MSG_KEY)) {
+        return handle_keys(body);
+    }
     let scroll = body.first() == Some(&MSG_SCROLL);
     let pointer = if scroll { None } else { parse(body) };
     let scroll_msg = if scroll { parse_scroll(body) } else { None };
@@ -410,6 +515,23 @@ mod tests {
         assert!(parse_scroll(&m).is_none());
         // Not a pointer message.
         assert!(parse(&m).is_none());
+    }
+
+    #[test]
+    fn parses_modifiers_and_only_allowed_keys() {
+        assert_eq!(parse_modifiers(&[MSG_MODIFIERS, 0b0011]), Some(MOD_CMD | MOD_SHIFT));
+        assert_eq!(parse_modifiers(&[MSG_MODIFIERS, 0xff]), Some(MOD_ALL));
+        assert!(parse_modifiers(&[MSG_MODIFIERS]).is_none());
+        let key = |code: u16, mask: u8| {
+            let c = code.to_be_bytes();
+            vec![MSG_KEY, c[0], c[1], mask]
+        };
+        assert_eq!(parse_key(&key(KEY_Z, MOD_CMD | MOD_SHIFT)), Some((KEY_Z, MOD_CMD | MOD_SHIFT)));
+        assert_eq!(parse_key(&key(KEY_ESCAPE, 0)), Some((KEY_ESCAPE, 0)));
+        // Anything else (say the letter Q with Cmd) is refused.
+        assert!(parse_key(&key(12, MOD_CMD)).is_none());
+        assert!(parse_key(&[MSG_KEY, 0, 6]).is_none());
+        assert_eq!(flags_for(MOD_CMD | MOD_SHIFT), 0x0010_0000 | 0x0002_0000);
     }
 
     #[test]
