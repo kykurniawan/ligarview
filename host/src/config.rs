@@ -15,11 +15,13 @@ pub struct Config {
     pub code: u32,
     /// Name of the paired tablet, for display.
     pub tablet: String,
+    /// Whether the tablet's pen may move the pointer and click on the Mac.
+    pub control: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new() }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false }
     }
 }
 
@@ -41,6 +43,7 @@ impl Config {
                 ("sharing", v) => c.sharing = v != "off",
                 ("code", v) => c.code = v.parse().unwrap_or(0),
                 ("tablet", v) => c.tablet = v.to_string(),
+                ("control", v) => c.control = v == "on",
                 _ => {}
             }
         }
@@ -53,14 +56,15 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
             if self.hevc { "hevc" } else { "h264" },
             if self.sharing { "on" } else { "off" },
             self.code,
-            self.tablet.replace('\n', " ")
+            self.tablet.replace('\n', " "),
+            if self.control { "on" } else { "off" }
         );
         let _ = std::fs::write(p, text);
     }

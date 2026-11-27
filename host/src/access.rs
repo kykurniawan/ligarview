@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static CODE: AtomicU32 = AtomicU32::new(0);
+static CONTROL: AtomicBool = AtomicBool::new(false);
 static KICK: AtomicBool = AtomicBool::new(false);
 static TABLET: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -22,6 +23,18 @@ pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::SeqCst);
     if !on {
         KICK.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Whether the tablet may control the Mac with its pen. Off until the user allows it.
+pub fn control_enabled() -> bool {
+    CONTROL.load(Ordering::SeqCst)
+}
+
+pub fn set_control(on: bool) {
+    CONTROL.store(on, Ordering::SeqCst);
+    if !on {
+        crate::input::release_all();
     }
 }
 

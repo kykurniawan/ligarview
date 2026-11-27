@@ -4,6 +4,9 @@ import android.graphics.BitmapFactory
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -22,6 +25,33 @@ class CursorClient(
     @Volatile private var opened: Opened? = null
     private var worker: Thread? = null
 
+    /** Input goes out on its own thread: a slow or dead link must never block the UI. */
+    private val sender = Executors.newSingleThreadExecutor { r -> Thread(r, "input-sender").apply { isDaemon = true } }
+    private val queued = AtomicInteger(0)
+
+    /** True while the host can receive input from this connection. */
+    val canSendInput: Boolean get() = connected && opened?.send != null
+
+    /** Sends one input message body to the host. Dropped when the link is backed up or down. */
+    fun sendInput(body: ByteArray) {
+        val send = opened?.send ?: return
+        if (!connected || queued.get() > MAX_QUEUED_INPUT) return
+        queued.incrementAndGet()
+        try {
+            sender.execute {
+                try {
+                    send(body)
+                } catch (_: Exception) {
+                    // The read side notices a dead link and reconnects.
+                } finally {
+                    queued.decrementAndGet()
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            queued.decrementAndGet()
+        }
+    }
+
     fun start() {
         running = true
         worker = thread(name = "cursor-client") { loop() }
@@ -34,6 +64,7 @@ class CursorClient(
         } catch (_: IOException) {
         }
         worker?.join(1000)
+        sender.shutdownNow()
     }
 
     private fun loop() {
@@ -87,5 +118,6 @@ class CursorClient(
         const val TYPE_POSITION = 1
         const val TYPE_SHAPE = 2
         const val MAX_MESSAGE_BYTES = 1 shl 20
+        const val MAX_QUEUED_INPUT = 64
     }
 }

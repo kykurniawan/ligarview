@@ -7,6 +7,7 @@ mod cursor_server;
 mod config;
 mod encoder;
 mod gui;
+mod input;
 mod pairing;
 mod protocol;
 mod server;
@@ -270,6 +271,8 @@ fn main() -> Result<()> {
     {
         let c = config::Config::load();
         access::init(c.sharing || !gui, c.code, c.tablet);
+        access::set_control(c.control);
+        input::init(display_id.clone());
     }
     if !a.no_tcp {
         tcp::spawn(a.port, video.clone(), cursor.clone())?;

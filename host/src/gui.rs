@@ -53,11 +53,12 @@ enum Control {
     Pair,
     Unpair,
     Tablet,
+    Input,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input][t as usize]
     }
 }
 
@@ -125,6 +126,8 @@ struct Gui {
     code_row: Retained<NSStackView>,
     unpair: Retained<NSButton>,
     login: Retained<NSButton>,
+    input: Retained<NSButton>,
+    input_note: Retained<NSTextField>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
     quality: Retained<NSPopUpButton>,
@@ -269,6 +272,12 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let codec_popup = popup(mtm, &handler, Control::Codec, &["H.264".into(), "HEVC".into()], config.hevc as usize);
     let login = unsafe { NSButton::checkboxWithTitle_target_action(&s("Start at login"), Some(&*handler), Some(sel!(press:)), mtm) };
     login.setTag(Control::Login as isize);
+    let input = unsafe { NSButton::checkboxWithTitle_target_action(&s("Allow pen control from the tablet"), Some(&*handler), Some(sel!(press:)), mtm) };
+    input.setTag(Control::Input as isize);
+    let input_note = label(mtm, "Needs Accessibility permission in System Settings.");
+    input_note.setTextColor(Some(&NSColor::systemOrangeColor()));
+    input_note.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    input_note.setHidden(true);
     let hint = label(mtm, "Changing a setting restarts the stream for a moment.");
     hint.setTextColor(Some(&NSColor::tertiaryLabelColor()));
     hint.setFont(Some(&NSFont::systemFontOfSize(11.0)));
@@ -282,6 +291,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing_row, &tablet_row, &code_row, &message];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
+    views.push(&input);
+    views.push(&input_note);
     views.push(&hint);
     let root = NSStackView::stackViewWithViews(&NSArray::from_slice(&views), mtm);
     root.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
@@ -334,6 +345,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             code_row,
             unpair,
             login,
+            input,
+            input_note,
             orientation,
             fps,
             quality,
@@ -447,6 +460,9 @@ pub fn tick(status: Status) {
                 gui.window.setContentSize(NSSize { width: size.width.max(380.0), height: size.height });
             }
         }
+        let control = crate::access::control_enabled();
+        gui.input.setState(if control { NSControlStateValueOn } else { NSControlStateValueOff });
+        gui.input_note.setHidden(!control || crate::input::trusted());
         gui.login.setState(if login_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
         if REOPEN.swap(false, Ordering::Relaxed) {
             gui.window.makeKeyAndOrderFront(None);
@@ -479,6 +495,18 @@ impl Gui {
                 return;
             }
             Control::Tablet => return,
+            Control::Input => {
+                let on = !crate::access::control_enabled();
+                crate::access::set_control(on);
+                self.config.control = on;
+                self.config.code = crate::access::code();
+                self.config.tablet = crate::access::tablet();
+                self.config.save();
+                if on && !crate::input::trusted() {
+                    crate::input::open_accessibility_settings();
+                }
+                return;
+            }
             Control::Pair => {
                 let name = self.tablet.titleOfSelectedItem().map(|n| n.to_string()).unwrap_or_default();
                 let digits: String = self.code_field.stringValue().to_string().chars().filter(|c| c.is_ascii_digit()).collect();

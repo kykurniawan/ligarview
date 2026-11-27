@@ -34,7 +34,13 @@ pub fn spawn(port: u16, video: Arc<VideoHub>, cursor: Option<Arc<CursorHub>>) ->
                 let cursor = cursor.clone();
                 std::thread::spawn(move || {
                     if let Some(stream) = admit(stream) {
-                        cursor.attach(stream);
+                        // The tablet's pen input comes back on the same connection.
+                        let reader = stream.try_clone();
+                        let stop = cursor.attach(stream);
+                        if let Ok(reader) = reader {
+                            let _ = reader.set_read_timeout(Some(Duration::from_millis(500)));
+                            crate::input::read_stream(reader, &stop);
+                        }
                     }
                 });
             }

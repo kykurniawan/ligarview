@@ -292,6 +292,13 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             setStatsVisible(stats.visibility != View.VISIBLE)
             true
         }
+        // The S Pen controls the Mac's pointer in full screen (the host must allow it).
+        val pen = PenInput(
+            enabled = { state.fullscreen && cursorClient?.canSendInput == true },
+            send = { cursorClient?.sendInput(it) },
+        )
+        surfaceView.setOnTouchListener { v, e -> pen.onTouch(v, e) }
+        surfaceView.setOnHoverListener { v, e -> pen.onHover(v, e) }
         // Rotating the tablet changes the root size: refit the full-screen picture (the preview is
         // re-placed by the Compose screen, which reports its new bounds).
         root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
