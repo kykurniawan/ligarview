@@ -9,10 +9,10 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObject, ProtocolObject};
 use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSEvent, NSEventMask, NSImage, NSMenu, NSMenuItem,
+    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSEvent, NSScreen, NSEventMask, NSImage, NSMenu, NSMenuItem,
     NSStatusBar, NSStatusItem, NSControlStateValueOff, NSControlStateValueOn,
 };
-use objc2_foundation::{NSData, NSObjectProtocol, NSDate, NSDefaultRunLoopMode, NSSize, NSString};
+use objc2_foundation::{NSPoint, NSData, NSObjectProtocol, NSDate, NSDefaultRunLoopMode, NSSize, NSString};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -166,13 +166,13 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str) {
     app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     let handler = Handler::new(mtm);
     let bar = NSStatusBar::systemStatusBar();
-    let status_item = bar.statusItemWithLength(-1.0); // NSVariableStatusItemLength
+    let status_item = bar.statusItemWithLength(26.0); // compact: crowded menu bars have little room
     status_item.setAutosaveName(Some(&title("LigarviewStatusItem")));
     status_item.setVisible(true);
     if let Some(button) = status_item.button(mtm) {
         let data = NSData::with_bytes(include_bytes!("../assets/menubar.png"));
         if let Some(img) = NSImage::initWithData(mtm.alloc(), &data) {
-            img.setSize(NSSize { width: 56.0 / 2.0, height: 44.0 / 2.0 });
+            img.setSize(NSSize { width: 20.0, height: 15.7 });
             img.setTemplate(true);
             button.setImage(Some(&img));
         } else {
@@ -283,7 +283,14 @@ pub fn tick(status: Status) {
             let app = NSApplication::sharedApplication(mb.mtm);
             #[allow(deprecated)]
             app.activateIgnoringOtherApps(true);
-            let at = NSEvent::mouseLocation();
+            // Drop down from the top right, where a status item's menu would open.
+            let at = match NSScreen::mainScreen(mb.mtm) {
+                Some(sc) => {
+                    let (f, v) = (sc.frame(), sc.visibleFrame());
+                    NSPoint { x: f.origin.x + f.size.width - 260.0, y: v.origin.y + v.size.height }
+                }
+                None => NSEvent::mouseLocation(),
+            };
             mb.menu.popUpMenuPositioningItem_atLocation_inView(None, at, None);
         }
     });
