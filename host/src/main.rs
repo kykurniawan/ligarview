@@ -1,4 +1,6 @@
+mod access;
 mod adb;
+mod bonjour;
 mod capture;
 mod cursor;
 mod cursor_server;
@@ -248,8 +250,13 @@ fn main() -> Result<()> {
     let hello = protocol::Hello { codec: codec.id(), width: px_w as u16, height: px_h as u16, fps: a.fps as u16 };
     let video = server::VideoHub::new(hello, rx, key_request.clone(), dump);
     let cursor = (!a.cursor_in_video).then(|| cursor_server::CursorHub::new(display_id.clone(), (a.width, a.height)));
+    {
+        let c = config::Config::load();
+        access::init(c.sharing || !gui, c.code);
+    }
     if !a.no_tcp {
         tcp::spawn(a.port, video.clone(), cursor.clone())?;
+        bonjour::start(a.port);
     }
     // adb and the USB accessory transport fight over the device (the link drops whenever adb
     // talks to it), and developer mode has no use for the accessory, so --adb replaces it.
@@ -291,8 +298,16 @@ fn main() -> Result<()> {
             println!("{m}");
         }
         pump_run_loop(Duration::from_millis(100));
+        if access::take_kick() {
+            video.kick();
+            if let Some(c) = &cursor {
+                c.kick();
+            }
+        }
         if gui {
-            let status = if capture.is_none() {
+            let status = if !access::enabled() {
+                gui::Status::Off
+            } else if capture.is_none() {
                 gui::Status::Starting
             } else if video.has_client() {
                 gui::Status::Streaming

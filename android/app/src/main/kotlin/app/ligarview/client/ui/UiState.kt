@@ -22,7 +22,7 @@ data class DeviceInfo(
 
 /** Everything the Compose screens read. The activity writes it, the UI only observes it. */
 @Stable
-class UiState(initialHost: String, val startOnWifiTab: Boolean) {
+class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Boolean) {
     var phase by mutableStateOf(LinkPhase.Idle)
     var transport by mutableStateOf(Transport.None)
 
@@ -43,11 +43,19 @@ class UiState(initialHost: String, val startOnWifiTab: Boolean) {
 
     /** Stream description (Connected) or the reason of the last failure (Retrying). */
     var detail by mutableStateOf("")
+    /** Optional manual address; empty means use the Mac found on the network. */
     var hostText by mutableStateOf(initialHost)
+
+    /** Pairing code shown in the Mac's window. */
+    var pairingCode by mutableStateOf(initialCode)
+
+    /** Name of the Mac found over Bonjour, or null while none is announced. */
+    var foundMac by mutableStateOf<String?>(null)
     var device by mutableStateOf(DeviceInfo())
 }
 
 class Actions(
+    val setCode: (String) -> Unit,
     val connect: () -> Unit,
     val connectUsb: () -> Unit,
     val disconnect: () -> Unit,

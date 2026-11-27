@@ -38,6 +38,7 @@ pub enum Status {
     Starting,
     Waiting,
     Streaming,
+    Off,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -48,11 +49,13 @@ enum Control {
     Codec,
     Login,
     Permission,
+    Sharing,
+    NewCode,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::NewCode][t as usize]
     }
 }
 
@@ -111,13 +114,15 @@ struct Gui {
     _delegate: Retained<Delegate>,
     status: Retained<NSTextField>,
     permission_row: Retained<NSStackView>,
+    sharing: Retained<NSButton>,
+    code: Retained<NSTextField>,
     login: Retained<NSButton>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
     quality: Retained<NSPopUpButton>,
     codec: Retained<NSPopUpButton>,
     config: Config,
-    shown: Option<(Status, bool)>,
+    shown: Option<(Status, bool, u32)>,
 }
 
 thread_local! {
@@ -223,6 +228,21 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     permission_row.setSpacing(10.0);
     permission_row.setHidden(true);
 
+    // Connection: sharing switch and pairing code, managed here rather than on the tablet.
+    let sharing = unsafe { NSButton::buttonWithTitle_target_action(&s("Stop sharing"), Some(&*handler), Some(sel!(press:)), mtm) };
+    sharing.setTag(Control::Sharing as isize);
+    let code = label(mtm, &format_code(config.code));
+    code.setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(22.0, 0.23)));
+    code.setSelectable(true);
+    let new_code = unsafe { NSButton::buttonWithTitle_target_action(&s("New code"), Some(&*handler), Some(sel!(press:)), mtm) };
+    new_code.setTag(Control::NewCode as isize);
+    let code_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*code as &NSView, &new_code]), mtm);
+    code_row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
+    code_row.setSpacing(12.0);
+    let code_hint = label(mtm, "Enter this code on the tablet once to pair over Wi-Fi. USB needs no code.");
+    code_hint.setTextColor(Some(&NSColor::tertiaryLabelColor()));
+    code_hint.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+
     // Settings.
     let orientation = popup(mtm, &handler, Control::Orientation, &["Landscape".into(), "Portrait".into()], config.portrait as usize);
     let fps_names: Vec<String> = FPS_CHOICES.iter().map(|f| format!("{f} fps")).collect();
@@ -242,7 +262,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
     ];
-    let mut views: Vec<&NSView> = vec![&header, &permission_row];
+    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing, &code_row, &code_hint];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
     views.push(&hint);
@@ -251,6 +271,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     root.setAlignment(objc2_app_kit::NSLayoutAttribute::Leading);
     root.setSpacing(14.0);
     root.setCustomSpacing_afterView(22.0, &header);
+    root.setCustomSpacing_afterView(4.0, &code_row);
+    root.setCustomSpacing_afterView(22.0, &code_hint);
     root.setEdgeInsets(NSEdgeInsets { top: 24.0, left: 24.0, bottom: 20.0, right: 24.0 });
 
     let size = root.fittingSize();
@@ -286,6 +308,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             _delegate: delegate,
             status,
             permission_row,
+            sharing,
+            code,
             login,
             orientation,
             fps,
@@ -350,9 +374,12 @@ pub fn tick(status: Status) {
             gui.handle(c, v);
         }
         let access = has_screen_access();
-        if gui.shown != Some((status, access)) {
-            gui.shown = Some((status, access));
+        gui.code.setStringValue(&s(&format_code(gui.config.code)));
+        gui.sharing.setTitle(&s(if status == Status::Off { "Start sharing" } else { "Stop sharing" }));
+        if gui.shown != Some((status, access, gui.config.code)) {
+            gui.shown = Some((status, access, gui.config.code));
             let (text, color) = match (status, access) {
+                (Status::Off, _) => ("Sharing is off", NSColor::systemOrangeColor()),
                 (_, false) => ("Needs Screen Recording permission", NSColor::systemOrangeColor()),
                 (Status::Starting, _) => ("Starting…", NSColor::secondaryLabelColor()),
                 (Status::Waiting, _) => ("Waiting for the tablet", NSColor::secondaryLabelColor()),
@@ -384,6 +411,18 @@ impl Gui {
     fn handle(&mut self, control: Control, value: isize) {
         let before = self.config.clone();
         match control {
+            Control::Sharing => {
+                self.config.sharing = !crate::access::enabled();
+                crate::access::set_enabled(self.config.sharing);
+                self.config.save();
+                return;
+            }
+            Control::NewCode => {
+                self.config.code = crate::access::generate_code();
+                crate::access::set_code(self.config.code);
+                self.config.save();
+                return;
+            }
             Control::Login => set_login(!login_enabled()),
             Control::Permission => {
                 unsafe { CGRequestScreenCaptureAccess() };
@@ -402,6 +441,11 @@ impl Gui {
             relaunch();
         }
     }
+}
+
+fn format_code(code: u32) -> String {
+    let d = format!("{code:06}");
+    format!("{} {}", &d[..3], &d[3..])
 }
 
 /// The `.app` bundle this process runs from, if any.

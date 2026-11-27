@@ -67,6 +67,10 @@ impl VideoHub {
     /// Starts streaming to `writer`, replacing any current client. Returns the client's id.
     pub fn attach<W: Write + Send + 'static>(&self, writer: W, peer: String) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        if !crate::access::enabled() {
+            println!("client refused, sharing is off: {peer}");
+            return id;
+        }
         println!("client connected: {peer}");
         let (tx, rx) = sync_channel::<Arc<Packet>>(30);
         *self.slot.lock().unwrap() = Some((id, tx));
@@ -78,6 +82,11 @@ impl VideoHub {
             println!("client disconnected: {peer} ({})", r.err().map(|e| e.to_string()).unwrap_or_default());
         });
         id
+    }
+
+    /// Drops the current client (sharing switched off, or the pairing code changed).
+    pub fn kick(&self) {
+        *self.slot.lock().unwrap() = None;
     }
 
     /// True while a client is attached.

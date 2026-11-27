@@ -11,6 +11,7 @@ secs = float(sys.argv[3]) if len(sys.argv) > 3 else 5
 out = open(sys.argv[4], "wb") if len(sys.argv) > 4 else None
 
 s = socket.create_connection((host, port))
+s.sendall(b"LGRP\x00\x00\x00\x00")  # pairing preamble; loopback needs no code
 
 def read(n):
     b = b""

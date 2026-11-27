@@ -53,6 +53,17 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private var client: StreamClient? = null
 
+    private lateinit var discovery: NsdDiscovery
+
+    /** The Mac announced on the network, if any. */
+    private var found: FoundMac? = null
+
+    /** `host:port` the running network client is connected to. */
+    private var activeTarget: String? = null
+
+    /** The user left on the tablet; stay disconnected until they pair again or reopen the app. */
+    private var userStopped = false
+
     /** Identifies the running client; status reports from a stopped one are ignored. */
     private var clientToken: Any? = null
     private var cursorClient: CursorClient? = null
@@ -115,7 +126,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         val saved = prefs().getString(KEY_TARGET, null)
-        state = UiState(initialHost = saved.orEmpty(), startOnWifiTab = saved != null)
+        val code = prefs().getString(KEY_CODE, "").orEmpty()
+        state = UiState(initialHost = saved.orEmpty(), initialCode = code, startOnWifiTab = saved != null || code.length == CODE_LENGTH)
+        discovery = NsdDiscovery(this, ::onMacFound)
         buildUi()
         hideSystemBars()
 
@@ -134,7 +147,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         // Connect automatically: over USB when the Mac has switched the tablet into accessory
         // mode, otherwise to the last used host.
-        if (saved != null || usbManager.accessoryList?.isNotEmpty() == true) {
+        if (hasWifiPlan() || usbManager.accessoryList?.isNotEmpty() == true) {
             wantConnection = true
             state.phase = LinkPhase.Connecting
         }
@@ -158,6 +171,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     override fun onPause() {
         cursorOverlay.stop()
+        discovery.stop()
         handler.removeCallbacks(deviceTick)
         super.onPause()
     }
@@ -165,6 +179,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onResume() {
         super.onResume()
         cursorOverlay.start()
+        discovery.start()
         requestHighRefreshRate()
         handler.post(deviceTick)
     }
@@ -218,8 +233,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         cursorOverlay = CursorOverlay(cursorView, root)
 
         val actions = Actions(
+            setCode = ::setCode,
             connect = ::connect,
             connectUsb = {
+                userStopped = false
                 state.everConnected = false
                 wantConnection = true
                 startClient()
@@ -395,6 +412,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** Leaves the Mac: stops streaming and returns to the idle information screen. */
     private fun disconnect() {
         setFullscreen(false)
+        userStopped = true
         wantConnection = false
         stopClient()
         state.phase = LinkPhase.Idle
@@ -421,10 +439,36 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
     }
 
+    private fun hasWifiPlan() =
+        prefs().getString(KEY_TARGET, null) != null || prefs().getString(KEY_CODE, "").orEmpty().length == CODE_LENGTH
+
+    private fun setCode(text: String) {
+        val code = text.filter { it.isDigit() }.take(CODE_LENGTH)
+        state.pairingCode = code
+        prefs().edit().putString(KEY_CODE, code).apply()
+        if (code.length == CODE_LENGTH) connect()
+    }
+
+    /** A Mac appeared or went away on the network: connect to it when the tablet is paired. */
+    private fun onMacFound(mac: FoundMac?) {
+        found = mac
+        state.foundMac = mac?.name
+        if (mac == null || state.hostText.isNotBlank() || state.pairingCode.length != CODE_LENGTH) return
+        if (usbManager.accessoryList?.isNotEmpty() == true) return
+        if (!wantConnection) {
+            if (userStopped) return
+            state.everConnected = false
+            wantConnection = true
+            startClient()
+        } else if (state.transport != Transport.Usb && activeTarget != "${mac.host}:${mac.port}") {
+            startClient()
+        }
+    }
+
     private fun connect() {
-        val target = state.hostText.trim()
-        if (target.isEmpty()) return
-        prefs().edit().putString(KEY_TARGET, target).apply()
+        val manual = state.hostText.trim()
+        prefs().edit().apply { if (manual.isEmpty()) remove(KEY_TARGET) else putString(KEY_TARGET, manual) }.apply()
+        userStopped = false
         state.everConnected = false
         wantConnection = true
         startClient()
@@ -465,9 +509,20 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             state.phase = LinkPhase.Permission
             return
         } else {
-            val (host, port) = parseTarget(state.hostText)
-            videoSource = TcpSource(host, port)
-            cursorSource = TcpSource(host, port + 1)
+            val manual = state.hostText.trim()
+            val (host, port) = when {
+                manual.isNotEmpty() -> parseTarget(manual)
+                else -> found?.let { it.host to it.port }
+            } ?: run {
+                // Paired but the Mac is not announced yet: wait for the discovery callback.
+                state.transport = Transport.None
+                state.phase = LinkPhase.Idle
+                return
+            }
+            val code = state.pairingCode.toIntOrNull() ?: 0
+            videoSource = TcpSource(host, port, code)
+            cursorSource = TcpSource(host, port + 1, code)
+            activeTarget = "$host:$port"
             state.transport = Transport.Network
         }
         state.phase = LinkPhase.Connecting
@@ -508,7 +563,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         usbLink?.close()
         usbLink = null
         stopClients()
-        if (prefs().getString(KEY_TARGET, null) != null) {
+        if (hasWifiPlan() && !userStopped) {
             startClient()
         } else {
             wantConnection = false
@@ -538,6 +593,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun stopClients() {
         clientToken = null
+        activeTarget = null
         cursorOverlay.enabled = false
         cursorClient?.stop()
         cursorClient = null
@@ -578,6 +634,8 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
         const val KEY_TARGET = "target"
+        const val KEY_CODE = "pairing_code"
+        const val CODE_LENGTH = 6
         const val DEFAULT_PORT = 7878
         const val DEFAULT_TARGET = "127.0.0.1:$DEFAULT_PORT"
     }

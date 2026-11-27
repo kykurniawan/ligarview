@@ -333,7 +333,41 @@ private fun UsbSteps(state: UiState, actions: Actions) {
 
 @Composable
 private fun WifiForm(state: UiState, actions: Actions) {
+    val fieldColors = TextFieldDefaults.colors(
+        focusedContainerColor = Palette.Surface,
+        unfocusedContainerColor = Palette.Surface,
+        focusedIndicatorColor = Palette.Accent,
+        unfocusedIndicatorColor = Color.Transparent,
+        focusedLabelColor = Palette.Accent,
+        unfocusedLabelColor = Palette.TextDim,
+        cursorColor = Palette.Accent,
+        focusedTextColor = Palette.Text,
+        unfocusedTextColor = Palette.Text,
+        focusedPlaceholderColor = Palette.TextFaint,
+        unfocusedPlaceholderColor = Palette.TextFaint,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(stringResource(R.string.wifi_help), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
+        TextField(
+            value = state.pairingCode,
+            onValueChange = actions.setCode,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text(stringResource(R.string.wifi_code_label)) },
+            placeholder = { Text(stringResource(R.string.wifi_code_hint)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+            shape = MaterialTheme.shapes.medium,
+            colors = fieldColors,
+        )
+        val mac = state.foundMac
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            StatusMark(if (mac != null) Palette.Success else Palette.TextFaint, size = 8.dp)
+            Text(
+                if (mac != null) stringResource(R.string.wifi_found, mac) else stringResource(R.string.wifi_searching),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (mac != null) Palette.Success else Palette.TextDim,
+            )
+        }
         TextField(
             value = state.hostText,
             onValueChange = { state.hostText = it },
@@ -344,23 +378,9 @@ private fun WifiForm(state: UiState, actions: Actions) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = { actions.connect() }),
             shape = MaterialTheme.shapes.medium,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Palette.Surface,
-                unfocusedContainerColor = Palette.Surface,
-                focusedIndicatorColor = Palette.Accent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedLabelColor = Palette.Accent,
-                unfocusedLabelColor = Palette.TextDim,
-                cursorColor = Palette.Accent,
-                focusedTextColor = Palette.Text,
-                unfocusedTextColor = Palette.Text,
-                focusedPlaceholderColor = Palette.TextFaint,
-                unfocusedPlaceholderColor = Palette.TextFaint,
-            ),
+            colors = fieldColors,
         )
-        AccentButton(stringResource(R.string.wifi_connect), actions.connect)
-        Text(stringResource(R.string.wifi_help), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
-        Text(stringResource(R.string.wifi_dev), style = MaterialTheme.typography.bodySmall, color = Palette.TextFaint)
+        Text(stringResource(R.string.wifi_usb_note), style = MaterialTheme.typography.bodySmall, color = Palette.TextFaint)
     }
 }
 

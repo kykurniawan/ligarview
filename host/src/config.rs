@@ -9,11 +9,15 @@ pub struct Config {
     pub fps: u32,
     pub bitrate: u32,
     pub hevc: bool,
+    /// Whether tablets may connect at all (Wi-Fi and USB). Switched from the window.
+    pub sharing: bool,
+    /// Six-digit pairing code a tablet must send over Wi-Fi; 0 until generated.
+    pub code: u32,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0 }
     }
 }
 
@@ -32,8 +36,14 @@ impl Config {
                 ("fps", v) => c.fps = v.parse().unwrap_or(c.fps),
                 ("bitrate", v) => c.bitrate = v.parse().unwrap_or(c.bitrate),
                 ("codec", v) => c.hevc = v == "hevc",
+                ("sharing", v) => c.sharing = v != "off",
+                ("code", v) => c.code = v.parse().unwrap_or(0),
                 _ => {}
             }
+        }
+        if !(100_000..1_000_000).contains(&c.code) {
+            c.code = crate::access::generate_code();
+            c.save();
         }
         c
     }
@@ -44,11 +54,13 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
-            if self.hevc { "hevc" } else { "h264" }
+            if self.hevc { "hevc" } else { "h264" },
+            if self.sharing { "on" } else { "off" },
+            self.code
         );
         let _ = std::fs::write(p, text);
     }

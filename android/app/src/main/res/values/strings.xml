@@ -39,11 +39,14 @@
     <string name="step3_body">Tick “Use by default” and it will not ask again.</string>
     <string name="usb_connect_now">Connect over USB</string>
     <string name="usb_note">No USB debugging or developer mode needed.</string>
-    <string name="wifi_field_label">Mac address</string>
-    <string name="wifi_field_hint">192.168.1.10:7878</string>
-    <string name="wifi_connect">Connect</string>
-    <string name="wifi_help">Both devices must be on the same network. 5 GHz Wi-Fi works best. You can find the Mac’s address in System Settings › Network.</string>
-    <string name="wifi_dev">Developer: with adb reverse, use 127.0.0.1:7878.</string>
+    <string name="wifi_field_label">Address (optional)</string>
+    <string name="wifi_field_hint">Only if your Mac is not found, e.g. 192.168.1.10:7878</string>
+    <string name="wifi_help">Open Ligarview on your Mac and enter the pairing code from its window. Both devices must be on the same network; 5 GHz Wi-Fi works best. The Mac starts and stops the connection.</string>
+    <string name="wifi_code_label">Pairing code</string>
+    <string name="wifi_code_hint">6 digits shown on your Mac</string>
+    <string name="wifi_found">Found %1$s</string>
+    <string name="wifi_searching">Looking for your Mac on this network…</string>
+    <string name="wifi_usb_note">With the USB cable plugged in, the tablet uses USB. Unplug it to use Wi-Fi.</string>
 
     <!-- Recommendations -->
     <string name="section_ready">Before you start</string>

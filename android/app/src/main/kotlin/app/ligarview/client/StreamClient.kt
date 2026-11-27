@@ -137,7 +137,7 @@ class StreamClient(
     private fun friendlyReason(e: Exception): String = when (e) {
         is java.net.SocketTimeoutException -> "no response from the Mac"
         is java.net.ConnectException -> "could not connect"
-        is java.io.EOFException -> "the Mac closed the connection"
+        is java.io.EOFException -> "the Mac closed the connection (check the pairing code and that sharing is on)"
         else -> e.message?.takeIf { it.length <= 60 } ?: "connection error"
     }
 

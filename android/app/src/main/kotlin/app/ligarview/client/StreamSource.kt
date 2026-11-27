@@ -18,7 +18,8 @@ class Opened(val input: InputStream, private val onClose: () -> Unit = {}) : Clo
     override fun close() = onClose()
 }
 
-class TcpSource(private val host: String, private val port: Int) : StreamSource {
+/** `code` is the pairing code shown in the Mac's window; the host checks it before it sends anything. */
+class TcpSource(private val host: String, private val port: Int, private val code: Int = 0) : StreamSource {
     override val label: String get() = "$host:$port"
 
     override fun open(): Opened {
@@ -29,6 +30,11 @@ class TcpSource(private val host: String, private val port: Int) : StreamSource 
             // The host sends a heartbeat every second, so silence means a dead link.
             socket.soTimeout = READ_TIMEOUT_MS
             socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+            socket.getOutputStream().apply {
+                write(PREAMBLE)
+                write(java.nio.ByteBuffer.allocate(4).putInt(code).array())
+                flush()
+            }
             return Opened(socket.getInputStream()) { socket.close() }
         } catch (e: Exception) {
             socket.close()
@@ -37,6 +43,7 @@ class TcpSource(private val host: String, private val port: Int) : StreamSource 
     }
 
     private companion object {
+        val PREAMBLE = "LGRP".toByteArray()
         const val READ_TIMEOUT_MS = 4000
         const val CONNECT_TIMEOUT_MS = 3000
     }

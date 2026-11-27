@@ -31,6 +31,7 @@ struct State {
 pub struct CursorHub {
     state: Arc<Mutex<State>>,
     clients: Arc<AtomicUsize>,
+    stops: Mutex<Vec<Arc<AtomicBool>>>,
 }
 
 impl CursorHub {
@@ -101,12 +102,27 @@ impl CursorHub {
                 }
             });
         }
-        Arc::new(Self { state, clients })
+        Arc::new(Self { state, clients, stops: Mutex::new(Vec::new()) })
+    }
+
+    /// Ends every attached cursor client.
+    pub fn kick(&self) {
+        for s in self.stops.lock().unwrap().drain(..) {
+            s.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Starts sending to `writer`. Returns a flag that ends the client when set.
     pub fn attach<W: Write + Send + 'static>(&self, writer: W) -> Arc<AtomicBool> {
-        let stop = Arc::new(AtomicBool::new(false));
+        let stop = Arc::new(AtomicBool::new(!crate::access::enabled()));
+        if stop.load(Ordering::Relaxed) {
+            return stop;
+        }
+        {
+            let mut stops = self.stops.lock().unwrap();
+            stops.retain(|s| !s.load(Ordering::Relaxed));
+            stops.push(stop.clone());
+        }
         let (state, clients, flag) = (self.state.clone(), self.clients.clone(), stop.clone());
         clients.fetch_add(1, Ordering::Relaxed);
         std::thread::spawn(move || {
