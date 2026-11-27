@@ -33,8 +33,6 @@ Fingers scroll and zoom. They never click, so a resting hand cannot trigger anyt
 - **Zoom** by moving two fingers apart or together. The Mac receives this as Ctrl and scroll, which browsers based on Chromium, Figma, Excalidraw and many map and drawing apps read as zoom. Safari and Preview do not.
 - After a pinch, lift both fingers before scrolling again.
 
-A long press still opens the statistics overlay.
-
 ## The sidebar
 
 Tap the small tab on the left edge of the full-screen picture to open the sidebar.

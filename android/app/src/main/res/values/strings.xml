@@ -73,7 +73,7 @@
     <string name="rec_cable_title">Use a good cable</string>
     <string name="rec_cable_body">USB 2 is enough. A USB 3 cable and port give extra headroom. The tablet charges over the same cable.</string>
 
-    <string name="footer_tip">In full screen, long-press the picture for statistics. Back returns here.</string>
+    <string name="footer_tip">In full screen, the tab on the left edge opens the sidebar. Back returns here.</string>
     <string name="preview_placeholder">The Mac screen appears here</string>
     <string name="preview_hint">Tap the preview for full screen</string>
     <string name="action_disconnect">Disconnect</string>

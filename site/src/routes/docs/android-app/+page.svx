@@ -8,7 +8,7 @@ The app opens on an information screen and returns to it with **Back**.
 
 - The state of the link: waiting, cable detected, connecting, streaming.
 - While streaming: live fps, bitrate and decode time.
-- A small live preview of the Mac screen, with the Mac's cursor drawn in it. **Tap the preview for full screen.** Back returns to the info screen. Long-press the full-screen picture for a statistics overlay.
+- A small live preview of the Mac screen, with the Mac's cursor drawn in it. **Tap the preview for full screen.** Back returns to the info screen.
 
 ## Right: connect and prepare
 

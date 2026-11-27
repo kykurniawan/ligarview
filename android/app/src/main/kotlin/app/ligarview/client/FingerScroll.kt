@@ -17,8 +17,9 @@ import kotlin.math.hypot
  * - Two fingers moving apart or together zoom (the host sends Ctrl + scroll, which Chromium-based
  *   apps, Figma, Excalidraw, maps and most browsers read as zoom).
  *
- * Until the fingers have moved past the touch slop nothing is claimed, so a long press still toggles
- * the statistics overlay. Three or more fingers are ignored. Wire format: see host/src/input.rs.
+ * The first touch is claimed so that the picture keeps receiving the finger's movement; nothing is
+ * sent until the fingers have moved past the touch slop. Three or more fingers are ignored. Wire
+ * format: see host/src/input.rs.
  */
 class FingerScroll(
     private val enabled: () -> Boolean,
@@ -80,7 +81,7 @@ class FingerScroll(
                 lastY = cy
                 startX = cx
                 startY = cy
-                return false
+                return true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (e.pointerCount > 2) {
@@ -126,7 +127,6 @@ class FingerScroll(
                     if (spread >= slopPx && spread > travel) {
                         // Two fingers moving apart or together: a zoom, not a scroll.
                         pinching = true
-                        view.cancelLongPress()
                         val s = span(e)
                         emit(PH_BEGIN, view, cx, cy, 0f, 0f, pinch = true)
                         emit(PH_CHANGE, view, cx, cy, s - startSpan, 0f, pinch = true)
@@ -137,7 +137,6 @@ class FingerScroll(
                     }
                     if (travel < slopPx) return false
                     scrolling = true
-                    view.cancelLongPress()
                     emit(PH_BEGIN, view, cx, cy, 0f, 0f)
                     // The content must not lag behind by the slop the fingers already travelled.
                     emit(PH_CHANGE, view, cx, cy, cx - startX, cy - startY)

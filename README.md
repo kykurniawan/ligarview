@@ -94,7 +94,8 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
    fills an upright tablet exactly), and the information screen switches to one column.
 
 The app reconnects automatically. Back returns to the connect screen.
-Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
+For development, `adb shell am start -n app.ligarview.client/.MainActivity --ez stats true` shows a statistics overlay
+(fps, bitrate, decoder latency) in full screen.
 
 ## Control the Mac from the tablet
 

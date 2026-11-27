@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         val secret = prefs().getString(KEY_SECRET, "").orEmpty()
         state = UiState(initialCode = newCode(), startOnWifiTab = secret.length == CODE_LENGTH)
         intent.getStringExtra(EXTRA_HOST)?.let { state.hostText = it.trim() }
+        statsForDevelopers = intent.getBooleanExtra(EXTRA_STATS, false)
         discovery = NsdDiscovery(this, ::onMacFound)
         pairingServer = PairingServer(this, { state.pairingCode }, ::onPaired)
         buildUi()
@@ -166,7 +167,12 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Developer route: `am start ... --es host 127.0.0.1:7878` connects to that address (adb reverse).
+        // Developer routes: `am start ... --ez stats true` shows the statistics overlay in full screen,
+        // `--es host 127.0.0.1:7878` connects to that address (adb reverse).
+        if (intent.hasExtra(EXTRA_STATS)) {
+            statsForDevelopers = intent.getBooleanExtra(EXTRA_STATS, false)
+            setStatsVisible(statsForDevelopers && state.fullscreen)
+        }
         intent.getStringExtra(EXTRA_HOST)?.let {
             state.hostText = it.trim()
             userStopped = false
@@ -302,12 +308,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         )
         statsMirror = mirror
         cursorOverlay.mirror = mirror
-        // Long-press the full-screen picture to toggle the statistics overlay.
-        surfaceView.setOnLongClickListener {
-            if (!state.fullscreen) return@setOnLongClickListener false
-            setStatsVisible(stats.visibility != View.VISIBLE)
-            true
-        }
         // The S Pen controls the Mac's pointer in full screen (the host must allow it).
         val sidebar = Sidebar(
             this,
@@ -455,6 +455,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         state.fullscreen = value
         backCallback.isEnabled = value
         if (value) {
+            setStatsVisible(statsForDevelopers)
             animateSurfaceTo(fitRect(), 0f)
         } else {
             setStatsVisible(false)
@@ -473,6 +474,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         state.everConnected = false
         setStatsVisible(false)
     }
+
+    /** Set from the launch intent (`--ez stats true`): the statistics overlay is shown in full screen. */
+    private var statsForDevelopers = false
 
     private fun setStatsVisible(visible: Boolean) {
         val v = if (visible) View.VISIBLE else View.GONE
@@ -715,6 +719,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         /** Saved by older versions; only cleared now. */
         const val KEY_TARGET = "manual_address"
         const val EXTRA_HOST = "host"
+        const val EXTRA_STATS = "stats"
         const val KEY_SECRET = "pairing_secret"
         const val CODE_LENGTH = 6
         const val DEFAULT_PORT = 7878

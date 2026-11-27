@@ -33,6 +33,12 @@ For development only. (There is no address field in the app; this is the one way
 host/target/release/ligarview-host --adb
 ```
 
+To see a statistics overlay (fps, bitrate, decoder latency) in full screen, start the app with `--ez stats true` instead of, or as well as, the address extra:
+
+```bash
+adb shell am start -n app.ligarview.client/.MainActivity --ez stats true
+```
+
 ## Flags
 
 | Flag | Effect |
