@@ -50,12 +50,14 @@ enum Control {
     Login,
     Permission,
     Sharing,
-    NewCode,
+    Pair,
+    Unpair,
+    Tablet,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::NewCode][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet][t as usize]
     }
 }
 
@@ -115,7 +117,10 @@ struct Gui {
     status: Retained<NSTextField>,
     permission_row: Retained<NSStackView>,
     sharing: Retained<NSButton>,
-    code: Retained<NSTextField>,
+    tablet: Retained<NSPopUpButton>,
+    code_field: Retained<NSTextField>,
+    message: Retained<NSTextField>,
+    tablets_shown: Vec<String>,
     login: Retained<NSButton>,
     orientation: Retained<NSPopUpButton>,
     fps: Retained<NSPopUpButton>,
@@ -231,17 +236,22 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     // Connection: sharing switch and pairing code, managed here rather than on the tablet.
     let sharing = unsafe { NSButton::buttonWithTitle_target_action(&s("Stop sharing"), Some(&*handler), Some(sel!(press:)), mtm) };
     sharing.setTag(Control::Sharing as isize);
-    let code = label(mtm, &format_code(config.code));
-    code.setFont(Some(&NSFont::monospacedSystemFontOfSize_weight(22.0, 0.23)));
-    code.setSelectable(true);
-    let new_code = unsafe { NSButton::buttonWithTitle_target_action(&s("New code"), Some(&*handler), Some(sel!(press:)), mtm) };
-    new_code.setTag(Control::NewCode as isize);
-    let code_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*code as &NSView, &new_code]), mtm);
+    let tablet = popup(mtm, &handler, Control::Tablet, &["No tablet found".into()], 0);
+    let code_field = NSTextField::textFieldWithString(&s(""), mtm);
+    code_field.setPlaceholderString(Some(&s("6-digit code")));
+    code_field.widthAnchor().constraintEqualToConstant(110.0).setActive(true);
+    let pair = unsafe { NSButton::buttonWithTitle_target_action(&s("Connect"), Some(&*handler), Some(sel!(press:)), mtm) };
+    pair.setTag(Control::Pair as isize);
+    let unpair = unsafe { NSButton::buttonWithTitle_target_action(&s("Unpair"), Some(&*handler), Some(sel!(press:)), mtm) };
+    unpair.setTag(Control::Unpair as isize);
+    let code_row = NSStackView::stackViewWithViews(&NSArray::from_slice(&[&*code_field as &NSView, &pair, &unpair]), mtm);
     code_row.setOrientation(NSUserInterfaceLayoutOrientation::Horizontal);
-    code_row.setSpacing(12.0);
-    let code_hint = label(mtm, "Enter this code on the tablet once to pair over Wi-Fi. USB needs no code.");
-    code_hint.setTextColor(Some(&NSColor::tertiaryLabelColor()));
-    code_hint.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    code_row.setSpacing(10.0);
+    let message = label(mtm, "Open Ligarview on the tablet, then enter the code it shows.");
+    message.setTextColor(Some(&NSColor::tertiaryLabelColor()));
+    message.setFont(Some(&NSFont::systemFontOfSize(11.0)));
+    let tablet_row = row(mtm, "Tablet", &tablet);
+    let code_row = row(mtm, "Code", &code_row);
 
     // Settings.
     let orientation = popup(mtm, &handler, Control::Orientation, &["Landscape".into(), "Portrait".into()], config.portrait as usize);
@@ -262,7 +272,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
     ];
-    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing, &code_row, &code_hint];
+    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing, &tablet_row, &code_row, &message];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
     views.push(&hint);
@@ -272,7 +282,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     root.setSpacing(14.0);
     root.setCustomSpacing_afterView(22.0, &header);
     root.setCustomSpacing_afterView(4.0, &code_row);
-    root.setCustomSpacing_afterView(22.0, &code_hint);
+    root.setCustomSpacing_afterView(22.0, &message);
     root.setEdgeInsets(NSEdgeInsets { top: 24.0, left: 24.0, bottom: 20.0, right: 24.0 });
 
     let size = root.fittingSize();
@@ -309,7 +319,10 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             status,
             permission_row,
             sharing,
-            code,
+            tablet,
+            code_field,
+            message,
+            tablets_shown: Vec::new(),
             login,
             orientation,
             fps,
@@ -374,7 +387,24 @@ pub fn tick(status: Status) {
             gui.handle(c, v);
         }
         let access = has_screen_access();
-        gui.code.setStringValue(&s(&format_code(gui.config.code)));
+        let tablets = crate::pairing::tablets();
+        if tablets != gui.tablets_shown {
+            let keep = gui.tablet.titleOfSelectedItem().map(|t| t.to_string());
+            gui.tablet.removeAllItems();
+            if tablets.is_empty() {
+                gui.tablet.addItemWithTitle(&s("No tablet found"));
+            }
+            for t in &tablets {
+                gui.tablet.addItemWithTitle(&s(t));
+            }
+            if let Some(k) = keep {
+                gui.tablet.selectItemWithTitle(&s(&k));
+            }
+            gui.tablets_shown = tablets;
+        }
+        if let Some(m) = crate::pairing::take_message() {
+            gui.message.setStringValue(&s(&m));
+        }
         gui.sharing.setTitle(&s(if status == Status::Off { "Start sharing" } else { "Stop sharing" }));
         if gui.shown != Some((status, access, gui.config.code)) {
             gui.shown = Some((status, access, gui.config.code));
@@ -414,13 +444,30 @@ impl Gui {
             Control::Sharing => {
                 self.config.sharing = !crate::access::enabled();
                 crate::access::set_enabled(self.config.sharing);
+                self.config.code = crate::access::code();
                 self.config.save();
                 return;
             }
-            Control::NewCode => {
-                self.config.code = crate::access::generate_code();
-                crate::access::set_code(self.config.code);
+            Control::Unpair => {
+                crate::access::set_code(0);
+                self.config.code = 0;
                 self.config.save();
+                self.message.setStringValue(&s("Unpaired. Pair a tablet again with the code it shows."));
+                return;
+            }
+            Control::Tablet => return,
+            Control::Pair => {
+                let name = self.tablet.titleOfSelectedItem().map(|n| n.to_string()).unwrap_or_default();
+                let digits: String = self.code_field.stringValue().to_string().chars().filter(|c| c.is_ascii_digit()).collect();
+                if !self.tablets_shown.contains(&name) {
+                    self.message.setStringValue(&s("Open Ligarview on the tablet first."));
+                } else if digits.len() != 6 {
+                    self.message.setStringValue(&s("Enter the 6-digit code shown on the tablet."));
+                } else {
+                    self.message.setStringValue(&s("Connecting…"));
+                    crate::pairing::pair(name, digits.parse().unwrap_or(0));
+                    self.code_field.setStringValue(&s(""));
+                }
                 return;
             }
             Control::Login => set_login(!login_enabled()),
@@ -436,16 +483,13 @@ impl Gui {
             Control::Quality => self.config.bitrate = BITRATE_CHOICES[value as usize].0,
         }
         let _ = (&self.orientation, &self.fps, &self.quality, &self.codec);
+        self.config.code = crate::access::code();
+        self.config.sharing = crate::access::enabled();
         if self.config != before {
             self.config.save();
             relaunch();
         }
     }
-}
-
-fn format_code(code: u32) -> String {
-    let d = format!("{code:06}");
-    format!("{} {}", &d[..3], &d[3..])
 }
 
 /// The `.app` bundle this process runs from, if any.

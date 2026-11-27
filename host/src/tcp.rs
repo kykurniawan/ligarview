@@ -62,7 +62,8 @@ fn admit(mut stream: TcpStream) -> Option<TcpStream> {
         return None;
     }
     let loopback = stream.peer_addr().is_ok_and(|a| a.ip().is_loopback());
-    if !loopback && u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]) != access::code() {
+    let code = access::code();
+    if !loopback && (code == 0 || u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]) != code) {
         reject("wrong pairing code", &stream);
         return None;
     }

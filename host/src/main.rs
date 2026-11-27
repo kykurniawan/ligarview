@@ -7,6 +7,7 @@ mod cursor_server;
 mod config;
 mod encoder;
 mod gui;
+mod pairing;
 mod protocol;
 mod server;
 mod tcp;
@@ -57,6 +58,9 @@ struct Args {
     /// Also write the raw H.264 stream to this file (debugging)
     #[arg(long)]
     out: Option<String>,
+    /// Pair with a tablet by name from the command line (debugging): --pair NAME CODE
+    #[arg(long, num_args = 2, value_names = ["TABLET", "CODE"])]
+    pair: Option<Vec<String>>,
     /// Keep the cursor inside the video instead of drawing it on the tablet (adds latency)
     #[arg(long)]
     cursor_in_video: bool,
@@ -207,6 +211,19 @@ fn main() -> Result<()> {
         }
         return Ok(());
     }
+    if let Some(p) = &a.pair {
+        pairing::init(a.port);
+        pairing::pair(p[0].clone(), p[1].parse()?);
+        for _ in 0..100 {
+            if let Some(m) = pairing::take_message() {
+                println!("{m}");
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        println!("no answer");
+        return Ok(());
+    }
     if a.cursor_watch {
         let mut seed = -1;
         for _ in 0..200 {
@@ -257,6 +274,10 @@ fn main() -> Result<()> {
     if !a.no_tcp {
         tcp::spawn(a.port, video.clone(), cursor.clone())?;
         bonjour::start(a.port);
+        pairing::init(a.port);
+        if gui {
+            pairing::start_browse();
+        }
     }
     // adb and the USB accessory transport fight over the device (the link drops whenever adb
     // talks to it), and developer mode has no use for the accessory, so --adb replaces it.

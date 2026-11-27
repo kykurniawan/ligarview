@@ -27,7 +27,7 @@ pub fn code() -> u32 {
     CODE.load(Ordering::SeqCst)
 }
 
-/// A new code also drops the current Wi-Fi client, which no longer matches it.
+/// Pairing a tablet (or unpairing, with 0) drops the current Wi-Fi client, which no longer matches.
 pub fn set_code(code: u32) {
     CODE.store(code, Ordering::SeqCst);
     KICK.store(true, Ordering::SeqCst);
@@ -35,17 +35,4 @@ pub fn set_code(code: u32) {
 
 pub fn take_kick() -> bool {
     KICK.swap(false, Ordering::SeqCst)
-}
-
-/// Random six-digit code (100000–999999).
-pub fn generate_code() -> u32 {
-    use std::io::Read;
-    let mut b = [0u8; 4];
-    let ok = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).is_ok();
-    let n = if ok {
-        u32::from_le_bytes(b)
-    } else {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(1)
-    };
-    100_000 + n % 900_000
 }

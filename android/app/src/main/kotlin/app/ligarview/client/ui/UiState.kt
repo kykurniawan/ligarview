@@ -46,7 +46,7 @@ class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Bool
     /** Optional manual address; empty means use the Mac found on the network. */
     var hostText by mutableStateOf(initialHost)
 
-    /** Pairing code shown in the Mac's window. */
+    /** Code this tablet shows; the user types it into the Mac to pair. */
     var pairingCode by mutableStateOf(initialCode)
 
     /** Name of the Mac found over Bonjour, or null while none is announced. */
@@ -55,7 +55,6 @@ class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Bool
 }
 
 class Actions(
-    val setCode: (String) -> Unit,
     val connect: () -> Unit,
     val connectUsb: () -> Unit,
     val disconnect: () -> Unit,

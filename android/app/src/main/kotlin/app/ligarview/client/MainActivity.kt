@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var client: StreamClient? = null
 
     private lateinit var discovery: NsdDiscovery
+    private lateinit var pairingServer: PairingServer
 
     /** The Mac announced on the network, if any. */
     private var found: FoundMac? = null
@@ -126,9 +127,10 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         onBackPressedDispatcher.addCallback(this, backCallback)
 
         val saved = prefs().getString(KEY_TARGET, null)
-        val code = prefs().getString(KEY_CODE, "").orEmpty()
-        state = UiState(initialHost = saved.orEmpty(), initialCode = code, startOnWifiTab = saved != null || code.length == CODE_LENGTH)
+        val secret = prefs().getString(KEY_SECRET, "").orEmpty()
+        state = UiState(initialHost = saved.orEmpty(), initialCode = newCode(), startOnWifiTab = saved != null || secret.length == CODE_LENGTH)
         discovery = NsdDiscovery(this, ::onMacFound)
+        pairingServer = PairingServer(this, { state.pairingCode }, ::onPaired)
         buildUi()
         hideSystemBars()
 
@@ -172,6 +174,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onPause() {
         cursorOverlay.stop()
         discovery.stop()
+        pairingServer.stop()
         handler.removeCallbacks(deviceTick)
         super.onPause()
     }
@@ -180,6 +183,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onResume()
         cursorOverlay.start()
         discovery.start()
+        pairingServer.start()
         requestHighRefreshRate()
         handler.post(deviceTick)
     }
@@ -233,7 +237,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         cursorOverlay = CursorOverlay(cursorView, root)
 
         val actions = Actions(
-            setCode = ::setCode,
             connect = ::connect,
             connectUsb = {
                 userStopped = false
@@ -439,21 +442,29 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
     }
 
-    private fun hasWifiPlan() =
-        prefs().getString(KEY_TARGET, null) != null || prefs().getString(KEY_CODE, "").orEmpty().length == CODE_LENGTH
+    private fun secret() = prefs().getString(KEY_SECRET, "").orEmpty()
 
-    private fun setCode(text: String) {
-        val code = text.filter { it.isDigit() }.take(CODE_LENGTH)
-        state.pairingCode = code
-        prefs().edit().putString(KEY_CODE, code).apply()
-        if (code.length == CODE_LENGTH) connect()
+    private fun hasWifiPlan() = prefs().getString(KEY_TARGET, null) != null || secret().length == CODE_LENGTH
+
+    private fun newCode() = (100_000 + java.security.SecureRandom().nextInt(900_000)).toString()
+
+    /** The Mac accepted this tablet's code: remember it as the secret and connect right away. */
+    private fun onPaired(host: String, port: Int, code: Int) {
+        prefs().edit().putString(KEY_SECRET, code.toString()).apply()
+        state.pairingCode = newCode()
+        found = FoundMac("Mac", host, port)
+        state.foundMac = found?.name
+        userStopped = false
+        state.everConnected = false
+        wantConnection = true
+        startClient()
     }
 
     /** A Mac appeared or went away on the network: connect to it when the tablet is paired. */
     private fun onMacFound(mac: FoundMac?) {
         found = mac
         state.foundMac = mac?.name
-        if (mac == null || state.hostText.isNotBlank() || state.pairingCode.length != CODE_LENGTH) return
+        if (mac == null || state.hostText.isNotBlank() || secret().length != CODE_LENGTH) return
         if (usbManager.accessoryList?.isNotEmpty() == true) return
         if (!wantConnection) {
             if (userStopped) return
@@ -519,7 +530,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
                 state.phase = LinkPhase.Idle
                 return
             }
-            val code = state.pairingCode.toIntOrNull() ?: 0
+            val code = secret().toIntOrNull() ?: 0
             videoSource = TcpSource(host, port, code)
             cursorSource = TcpSource(host, port + 1, code)
             activeTarget = "$host:$port"
@@ -633,8 +644,8 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         const val PREVIEW_RADIUS_DP = 12
         const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
-        const val KEY_TARGET = "target"
-        const val KEY_CODE = "pairing_code"
+        const val KEY_TARGET = "manual_address"
+        const val KEY_SECRET = "pairing_secret"
         const val CODE_LENGTH = 6
         const val DEFAULT_PORT = 7878
         const val DEFAULT_TARGET = "127.0.0.1:$DEFAULT_PORT"

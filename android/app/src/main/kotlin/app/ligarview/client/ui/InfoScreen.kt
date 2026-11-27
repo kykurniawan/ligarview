@@ -348,17 +348,15 @@ private fun WifiForm(state: UiState, actions: Actions) {
     )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.wifi_help), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
-        TextField(
-            value = state.pairingCode,
-            onValueChange = actions.setCode,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.wifi_code_label)) },
-            placeholder = { Text(stringResource(R.string.wifi_code_hint)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-            shape = MaterialTheme.shapes.medium,
-            colors = fieldColors,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.wifi_code_label), style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
+            Text(
+                state.pairingCode.chunked(3).joinToString(" "),
+                style = MaterialTheme.typography.headlineMedium,
+                color = Palette.Text,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            )
+        }
         val mac = state.foundMac
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             StatusMark(if (mac != null) Palette.Success else Palette.TextFaint, size = 8.dp)

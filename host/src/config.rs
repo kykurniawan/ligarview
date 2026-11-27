@@ -11,7 +11,7 @@ pub struct Config {
     pub hevc: bool,
     /// Whether tablets may connect at all (Wi-Fi and USB). Switched from the window.
     pub sharing: bool,
-    /// Six-digit pairing code a tablet must send over Wi-Fi; 0 until generated.
+    /// Code of the paired tablet, which it must send over Wi-Fi; 0 while nothing is paired.
     pub code: u32,
 }
 
@@ -40,10 +40,6 @@ impl Config {
                 ("code", v) => c.code = v.parse().unwrap_or(0),
                 _ => {}
             }
-        }
-        if !(100_000..1_000_000).contains(&c.code) {
-            c.code = crate::access::generate_code();
-            c.save();
         }
         c
     }
