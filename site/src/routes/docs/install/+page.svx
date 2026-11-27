@@ -1,0 +1,39 @@
+# Install
+
+There are no prebuilt releases yet, so both apps are built from source. Clone the repository first:
+
+```bash
+git clone https://github.com/kykurniawan/ligarview.git
+cd ligarview
+```
+
+## The Mac app
+
+Needs [Rust](https://rustup.rs) (stable) and Xcode's command line tools.
+
+```bash
+tools/bundle.sh
+open host/target/Ligarview.app
+```
+
+`bundle.sh` builds the host and wraps it as `Ligarview.app` with an icon. Move it to **Applications** if you like. The first launch asks for **Screen Recording**: allow it in **System Settings → Privacy & Security → Screen & System Audio Recording**, then open the app again.
+
+You can also run the host straight from a terminal, without the window:
+
+```bash
+cd host
+cargo run --release
+```
+
+## The Android app
+
+Needs the Android SDK and JDK 17 or newer. With the tablet connected and USB debugging on **just for this install**:
+
+```bash
+cd android
+./gradlew installDebug
+```
+
+Or build the APK with `./gradlew assembleDebug` and copy `android/app/build/outputs/apk/debug/app-debug.apk` to the tablet any way you like. USB debugging is only needed to install; running Ligarview never needs it.
+
+<p class="note">Next: <a href="/docs/connect">connect the tablet</a>.</p>

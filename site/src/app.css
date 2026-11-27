@@ -1,0 +1,33 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+:root {
+  --bg: #0b0d10;
+  --text: #e8ebf0;
+  --dim: #98a1ae;
+  --faint: #626b78;
+  --line: #1b2027;
+  --accent: #6e9bff;
+  --brand: #1250d3;
+  --code-bg: #12161b;
+  --wrap: 1120px;
+  --gutter: clamp(20px, 5vw, 40px);
+  --section: clamp(72px, 10vw, 128px);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter Variable', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+code, pre { font-family: 'JetBrains Mono Variable', ui-monospace, monospace; font-size: 0.875em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+::selection { background: #1250d3; color: #fff; }

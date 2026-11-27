@@ -1,0 +1,32 @@
+# Connect
+
+## USB (recommended)
+
+Plug and play. Nothing to enable on the tablet: no USB debugging, no developer mode, no adb.
+
+1. Start **Ligarview** on the Mac.
+2. Plug the tablet in with a cable that carries data, not a charge-only one.
+3. The Mac switches the tablet into USB accessory mode and Android asks whether to open Ligarview. Tap **OK**. Tick *Use by default* to skip the question next time.
+
+Measured on a Galaxy Tab S9 over USB 2.0: 0.25 ms round trip and 215 Mbit/s. A USB 3 cable and port give more headroom, and the tablet charges over the same cable.
+
+## Wi-Fi
+
+Open the Android app, choose the **Wi-Fi** tab, and enter the Mac's address as `<mac-ip>:7878`. Both devices must be on the same network (5 GHz recommended), and ports **7878** (video) and **7879** (cursor) must be reachable. The app remembers the last address.
+
+## Developer mode (adb)
+
+For development only. Start the host with `--adb`: it sets up `adb reverse` tunnels, and you connect the app to `127.0.0.1:7878`. This needs USB debugging and replaces the USB accessory transport, because the two fight over the device.
+
+```bash
+host/target/release/ligarview-host --adb
+```
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `--no-usb` | Do not use the USB accessory transport |
+| `--no-tcp` | Do not listen for TCP connections |
+| `--adb` | Manage `adb reverse` tunnels (developer mode) |
+| `--port N` | TCP port, default 7878 (the cursor uses N + 1) |

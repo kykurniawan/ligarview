@@ -1,0 +1,42 @@
+# How it works
+
+```
+Mac (Rust)                                        Android (Kotlin)
+CGVirtualDisplay -> ScreenCaptureKit              USB accessory pipe or TCP
+  (extra display)    (capture)  -> VideoToolbox  ====>  MediaCodec -> SurfaceView
+                                   H.264 (HW)
+USB: Android Open Accessory (no USB debugging)  |  Wi-Fi: TCP  |  developer: adb reverse
+```
+
+## The virtual display
+
+macOS has no public API for an extra display. Ligarview uses the private `CGVirtualDisplay` API, which works without SIP changes or kernel extensions. A HiDPI mode is defined in points with a pixel size of points x scale, so a 1280x800 display is 2560x1600 real pixels. Apple may change this API in a macOS update.
+
+## Capture and encode
+
+ScreenCaptureKit captures the display as YCbCr 420 frames and VideoToolbox encodes them in hardware. Captured frames are never queued: the encoder always takes the newest one and stale frames are dropped.
+
+VideoToolbox defaults to 11 reference frames, which makes hardware decoders buffer 20+ frames before output. The host limits it to 1, which took decoder latency on a Tab S9 from about 500 ms to about 40 ms. On Qualcomm devices the app also sets `vendor.qti-ext-dec-picture-order.enable`, which removes the last held-back frame (about 40 ms to 8 ms at 30 fps).
+
+The default rate control sustains about 57 fps on a busy 2560x1600 screen with about 40 ms encode latency. H.264 and HEVC measured the same latency on an M1 Pro and a Tab S9; HEVC's benefit is compression, not speed.
+
+## The cursor
+
+The cursor is not part of the video. The host sends its position, and its shape when it changes, on a second connection. The tablet draws it on top once per display refresh, so the cursor never waits for capture, encode and decode.
+
+## Transports
+
+| Transport | Video | Cursor |
+|---|---|---|
+| TCP (Wi-Fi, adb) | `port` | `port + 1` |
+| USB accessory | channel 1 of one pipe | channel 2 of the same pipe |
+
+On USB the Mac uses the Android Open Accessory protocol, so no USB debugging is needed. Frames on the pipe are `channel u8 | length u16 | payload`, at most 16000 bytes each. The streams inside are identical to the TCP ones.
+
+## Wire format
+
+Video starts with a 12-byte hello (magic `LGRV`, version, codec, width, height, fps), then length-prefixed Annex-B frames with flags for keyframe, repeat and heartbeat. The cursor channel carries position messages (x, y, inside) and shape messages (size, hotspot, PNG). The source of truth is [`host/src/protocol.rs`](https://github.com/kykurniawan/ligarview/blob/main/host/src/protocol.rs) and [`host/src/cursor_server.rs`](https://github.com/kykurniawan/ligarview/blob/main/host/src/cursor_server.rs).
+
+## License
+
+Apache License 2.0. See [LICENSE](https://github.com/kykurniawan/ligarview/blob/main/LICENSE).

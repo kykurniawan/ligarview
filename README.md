@@ -7,6 +7,8 @@ Think Sidecar, but for Android (built and tested with a Samsung Galaxy Tab S9).
 
 No touch input, no audio, no extras. The tablet is just a monitor.
 
+Docs: **https://ligarview.rizkykurniawan.id**
+
 ## How it works
 
 ```

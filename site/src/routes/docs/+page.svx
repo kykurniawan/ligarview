@@ -1,0 +1,31 @@
+# Introduction
+
+Ligarview turns an Android tablet into a real **extended** second display for your Mac, over a USB cable or Wi-Fi. Think Sidecar, but for Android. It was built and tested with a Samsung Galaxy Tab S9 and an M1 Pro MacBook.
+
+The tablet is only a monitor: no touch input, no audio, no extras. You use the Mac's own mouse and keyboard, and the cursor moves onto the tablet like on any second screen.
+
+## What is in the box
+
+- **The Mac app** (Rust). Creates a virtual display, captures it, encodes it in hardware and sends it to the tablet.
+- **The Android app** (Kotlin, Jetpack Compose). Decodes the video in hardware, draws the cursor on top and shows a status screen with recommendations.
+
+## Quick start
+
+1. [Install](/docs/install) the Mac app and the Android app.
+2. Start **Ligarview** on the Mac and grant the Screen Recording permission once.
+3. Plug the tablet into the Mac and accept the prompt on the tablet.
+4. Open **System Settings → Displays** on the Mac to arrange the new display.
+
+## Requirements
+
+| | |
+|---|---|
+| Mac | Apple Silicon, macOS 14 or newer (developed on macOS 15) |
+| Tablet | Android 11 or newer (API 30), hardware H.264 decoder |
+| Build tools | Rust (stable), Android SDK and JDK 17+ |
+| Permission | Screen Recording for the Mac app |
+
+## Good to know
+
+- The virtual display uses the private `CGVirtualDisplay` API. It needs no SIP changes or kernel extensions, but Apple can change it in a macOS update.
+- Ligarview is early software. It is useful today, and the rough edges are listed under [troubleshooting](/docs/troubleshooting).

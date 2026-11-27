@@ -1,0 +1,36 @@
+# Troubleshooting
+
+## The tablet does not connect over USB
+
+- Use a cable that carries data. Charge-only cables power the tablet but never show up to the Mac.
+- Start the Mac app first, then plug in. If Android asked "Open Ligarview?" and you dismissed it, unplug and replug.
+- Do not run the host with `--adb` at the same time: it replaces the USB transport.
+
+## macOS keeps asking for Screen Recording
+
+Remove the old **Ligarview** entry in **Privacy & Security → Screen & System Audio Recording**, add it again, and reopen the app. If you build from source, use `tools/bundle.sh`: it signs the app with a requirement tied to its identifier so the permission survives rebuilds.
+
+## The picture is blurry
+
+The display must reach its HiDPI mode (2560x1600 real pixels for 1280x800 points). The app reports the mode it selected; a different `--scale` or a size macOS refuses will fall back to a blurrier one.
+
+## It feels laggy
+
+- Turn off **Power saving** on the tablet and set **Motion smoothness** to Adaptive. The info screen tells you when either is off.
+- Prefer USB; on Wi-Fi use 5 GHz and stay close to the router.
+- On a 120 Hz tablet try `--fps 120 --bitrate 60`.
+- Try `--low-latency-rc` for about 10 ms less encode latency, at the cost of choppier window dragging.
+
+## The cursor is missing
+
+The cursor travels on its own connection and is drawn by the tablet. If it vanishes, move the mouse once; the host resends the shape whenever it changes. If it stays missing, restart the app and report it on GitHub with the host log.
+
+## You should not have to restart anything
+
+| Situation | What happens |
+|---|---|
+| USB cable unplugged and replugged | The Mac switches the tablet to accessory mode again and the app reconnects |
+| Mac app restarted | The host asks the tablet app whether it wants a stream, and the app restarts its session |
+| Wi-Fi drops or the host freezes | The host sends a heartbeat every second; 4 s of silence counts as a dead link and the app reconnects |
+| Tablet sleeps or locks | The app reconnects when it returns to the foreground |
+| Mac sleeps | The host recreates the display, HiDPI mode, capture and encoder, then asks for a keyframe |

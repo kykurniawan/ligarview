@@ -1,0 +1,37 @@
+# The Mac app
+
+`Ligarview.app` has a Dock icon and a small window. Closing the window keeps the host running; click the Dock icon to bring it back. **⌘Q** quits and removes the virtual display.
+
+## The window
+
+- **Status.** Waiting for the tablet, or streaming, with the resolution, frame rate and codec in use.
+- **Orientation.** Landscape, or Portrait for reading code with the tablet held upright. The shape of the display is decided by the Mac; the tablet only shows it.
+- **Frame rate.** 30, 60 or 90 fps.
+- **Quality.** 20, 30, 40 or 60 Mbps.
+- **Codec.** H.264 (default) or HEVC.
+- **Start at login.** Starts the app without opening the window.
+
+Changing a setting relaunches the host with it, so the tablet disconnects for a few seconds and reconnects by itself. Settings live in `~/Library/Application Support/Ligarview/config`.
+
+## Command line
+
+The window is optional. Running the host from a terminal uses flags instead:
+
+```bash
+host/target/release/ligarview-host --fps 120 --bitrate 60
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--width`, `--height` | 1280, 800 | Logical size in points. The picture is width x scale pixels |
+| `--scale` | 2 | 2 is HiDPI (2560x1600 real pixels), 1 is one pixel per point |
+| `--portrait` | off | Swap width and height |
+| `--fps` | 60 | Use 120 for a 120 Hz panel |
+| `--bitrate` | 30 | In Mbps |
+| `--codec` | h264 | `h264` or `hevc` |
+| `--low-latency-rc` | off | About 10 ms less encode latency, but caps throughput near 30 fps on busy screens |
+| `--cursor-in-video` | off | Render the cursor into the video instead of on the tablet (adds latency) |
+| `--stats` | off | Print capture and encode rates once per second |
+| `--gui` | off | Show the window (always on inside `Ligarview.app`) |
+
+For a smooth 120 Hz panel on Samsung tablets, set **Settings → Display → Motion smoothness** to Adaptive and turn off Power saving.
