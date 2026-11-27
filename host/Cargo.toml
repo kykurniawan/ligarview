@@ -12,3 +12,4 @@ objc2-core-foundation = "0.3"
 anyhow = "1"
 screencapturekit = "12.0.0"
 clap = { version = "4.6.10", features = ["derive"] }
+rusb = { version = "0.9.4", features = ["vendored"] }
