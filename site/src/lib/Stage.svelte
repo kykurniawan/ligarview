@@ -55,8 +55,9 @@
     </div>
   </div>
   <div class="tab">
+    <span class="btn"></span><span class="btn b2"></span>
     <div class="screen">
-      <div class="win" style="left: calc(var(--x) * 1cqw - 64cqw - 1.4cqw)">
+      <div class="win" style="left: calc(var(--x) * 1cqw - 64cqw - 1.6cqw)">
         {@render appWindow()}
       </div>
     </div>
@@ -81,14 +82,17 @@
   .stage { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 100 / 42; }
   .mac, .tab { position: absolute; background: #050608; box-shadow: inset 0 0 0 1px #2a2f36, 0 2.4cqw 4cqw rgba(0, 0, 0, 0.5); }
   .mac { left: 0; top: 0; width: 60cqw; padding: 0.6cqw; border-radius: 1.2cqw; }
-  .tab { left: 64cqw; top: 8cqw; width: 36cqw; padding: 1.4cqw; border-radius: 2.4cqw; background: linear-gradient(145deg, #39404a, #1f242b); }
+  .tab { left: 64cqw; top: 8cqw; width: 36cqw; padding: 1.6cqw; border-radius: 3cqw; background: linear-gradient(145deg, #3a414b, #20252c); box-shadow: inset 0 0 0 1px #4a525d, 0 2.4cqw 4cqw rgba(0, 0, 0, 0.5); }
+  .tab::before { content: ''; position: absolute; top: 50%; left: 0.55cqw; width: 0.6cqw; height: 0.6cqw; border-radius: 50%; background: #0a0c0f; transform: translateY(-50%); }
+  .btn { position: absolute; top: 18%; right: -0.3cqw; width: 0.3cqw; height: 9%; border-radius: 0 0.3cqw 0.3cqw 0; background: #2a3038; }
+  .b2 { top: 31%; height: 5%; }
   .screen { position: relative; overflow: hidden; background: #2a3550 url('/desktop.jpg') center / cover; }
   .mac .screen { aspect-ratio: 2000 / 1299; border-radius: 0.7cqw; }
-  .tab .screen { aspect-ratio: 16 / 10; border-radius: 1.1cqw; background-size: 122% auto; background-position: 50% 42%; }
+  .tab .screen { aspect-ratio: 16 / 10; border-radius: 1.4cqw; background-size: 122% auto; background-position: 50% 42%; }
 
   .win { position: absolute; top: calc(12cqw - var(--top, 0cqw)); width: 24cqw; font-size: 0.85cqw; color: #e8e8ea; background: #262629; border-radius: 0.9em; overflow: visible; box-shadow: 0 1.4em 3.4em rgba(0, 0, 0, 0.5); }
   .mac .win { top: calc(11.4cqw - 0.6cqw); }
-  .tab .win { top: calc(9cqw - 8cqw - 1.4cqw + 2.4cqw); }
+  .tab .win { top: calc(9cqw - 8cqw - 1.6cqw + 2.6cqw); }
   .titlebar { position: relative; display: flex; align-items: center; gap: 0.55em; height: 2.8em; padding: 0 1.1em; background: #323235; border-radius: 0.9em 0.9em 0 0; }
   .dot { width: 0.9em; height: 0.9em; border-radius: 50%; }
   .r { background: #ff5f57; } .y { background: #febc2e; } .g { background: #28c840; }
