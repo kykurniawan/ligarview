@@ -38,6 +38,11 @@ The tablet can now control the Mac. Everything that does so is **off until you s
 - A tablet paired before the Connection setting existed keeps using Wi-Fi; new installs default to USB.
 - The connect screen no longer promises an extra display, since mirror mode does not create one.
 
+### Fixed
+
+- The Mac app icon was larger than other apps' icons in the Dock and the Cmd+Tab switcher, because its artwork
+  filled the whole canvas. It now has the standard macOS margin and shadow.
+
 ### Notes
 
 - Typing is limited to text and a few editing keys, and coordinates and text are checked on the Mac.

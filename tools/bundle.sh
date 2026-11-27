@@ -12,7 +12,8 @@ cp host/target/release/ligarview-host "$APP/Contents/MacOS/ligarview-host"
 
 ICONSET=$(mktemp -d)/Ligarview.iconset
 mkdir -p "$ICONSET"
-SRC=assets/ligarview-icon.png
+# The full-bleed artwork with the standard macOS margin and shadow added: see tools/macos-icon.swift.
+SRC=assets/ligarview-icon-mac.png
 for s in 16 32 64 128 256 512; do
   sips -z $s $s "$SRC" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
   sips -z $((s * 2)) $((s * 2)) "$SRC" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
