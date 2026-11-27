@@ -17,11 +17,13 @@ pub struct Config {
     pub tablet: String,
     /// Whether the tablet's pen may move the pointer and click on the Mac.
     pub control: bool,
+    /// Whether the tablet's fingers may scroll the Mac.
+    pub finger: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false }
+        Self { portrait: false, fps: 60, bitrate: 30, hevc: false, sharing: true, code: 0, tablet: String::new(), control: false, finger: false }
     }
 }
 
@@ -44,6 +46,7 @@ impl Config {
                 ("code", v) => c.code = v.parse().unwrap_or(0),
                 ("tablet", v) => c.tablet = v.to_string(),
                 ("control", v) => c.control = v == "on",
+                ("finger", v) => c.finger = v == "on",
                 _ => {}
             }
         }
@@ -56,7 +59,7 @@ impl Config {
             let _ = std::fs::create_dir_all(dir);
         }
         let text = format!(
-            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\n",
+            "orientation={}\nfps={}\nbitrate={}\ncodec={}\nsharing={}\ncode={}\ntablet={}\ncontrol={}\nfinger={}\n",
             if self.portrait { "portrait" } else { "landscape" },
             self.fps,
             self.bitrate,
@@ -64,7 +67,8 @@ impl Config {
             if self.sharing { "on" } else { "off" },
             self.code,
             self.tablet.replace('\n', " "),
-            if self.control { "on" } else { "off" }
+            if self.control { "on" } else { "off" },
+            if self.finger { "on" } else { "off" }
         );
         let _ = std::fs::write(p, text);
     }

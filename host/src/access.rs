@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static CODE: AtomicU32 = AtomicU32::new(0);
 static CONTROL: AtomicBool = AtomicBool::new(false);
+static FINGER: AtomicBool = AtomicBool::new(false);
 static KICK: AtomicBool = AtomicBool::new(false);
 static TABLET: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -36,6 +37,15 @@ pub fn set_control(on: bool) {
     if !on {
         crate::input::release_all();
     }
+}
+
+/// Whether the tablet may scroll the Mac with its fingers. Off until the user allows it.
+pub fn finger_enabled() -> bool {
+    FINGER.load(Ordering::SeqCst)
+}
+
+pub fn set_finger(on: bool) {
+    FINGER.store(on, Ordering::SeqCst);
 }
 
 pub fn code() -> u32 {

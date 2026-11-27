@@ -272,6 +272,10 @@ fn main() -> Result<()> {
         let c = config::Config::load();
         access::init(c.sharing || !gui, c.code, c.tablet);
         access::set_control(c.control);
+        access::set_finger(c.finger);
+        if gui && (c.control || c.finger) && !input::request_trust() {
+            println!("input: waiting for the Accessibility permission");
+        }
         input::init(display_id.clone());
     }
     if !a.no_tcp {

@@ -297,7 +297,12 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             enabled = { state.fullscreen && cursorClient?.canSendInput == true },
             send = { cursorClient?.sendInput(it) },
         )
-        surfaceView.setOnTouchListener { v, e -> pen.onTouch(v, e) }
+        val fingers = FingerScroll(
+            enabled = { state.fullscreen && cursorClient?.canSendInput == true },
+            send = { cursorClient?.sendInput(it) },
+            slopPx = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat(),
+        )
+        surfaceView.setOnTouchListener { v, e -> pen.onTouch(v, e) || fingers.onTouch(v, e) }
         surfaceView.setOnHoverListener { v, e -> pen.onHover(v, e) }
         // Rotating the tablet changes the root size: refit the full-screen picture (the preview is
         // re-placed by the Compose screen, which reports its new bounds).
