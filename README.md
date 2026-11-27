@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/logo.png" width="120" alt="Ligarview"></p>
+<p align="center"><img src="assets/ligarview-logo.png" width="160" alt="Ligarview"></p>
 
 # Ligarview
 
