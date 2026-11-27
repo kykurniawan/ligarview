@@ -10,7 +10,7 @@ points and clicks, fingers scroll and zoom, and the tablet's keyboard types, wit
 modifier keys, Esc, Undo, the Dock and the menu bar. All of that is **off until you switch it on** in the Mac
 window. You can also mirror the main display instead of adding an extra one.
 
-Docs: **https://ligarview.rizkykurniawan.id**
+Docs: **https://ligarview.rizkykurniawan.id** · [Changelog](CHANGELOG.md)
 
 ## How it works
 

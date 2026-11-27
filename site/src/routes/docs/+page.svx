@@ -30,3 +30,4 @@ The tablet is a monitor first: the Mac's cursor moves onto it like on any second
 
 - The virtual display uses the private `CGVirtualDisplay` API. It needs no SIP changes or kernel extensions, but Apple can change it in a macOS update.
 - Ligarview is early software. It is useful today, and the rough edges are listed under [troubleshooting](/docs/troubleshooting).
+- What changed in each release is in the [changelog](https://github.com/kykurniawan/ligarview/blob/main/CHANGELOG.md). Update the Mac app and the Android app together.
