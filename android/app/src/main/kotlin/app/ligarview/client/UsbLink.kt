@@ -10,7 +10,9 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.SocketTimeoutException
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
@@ -106,6 +108,15 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
 
     private val output = FileOutputStream(pfd.fileDescriptor)
 
+    /**
+     * Writes to the accessory only complete when the host reads them, so with the host gone a
+     * write blocks indefinitely. Control frames therefore go through their own thread, and only
+     * the newest pending command is kept (a RESUME that was never delivered is not worth
+     * repeating ten times).
+     */
+    private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "usb-writer").apply { isDaemon = true } }
+    private val pendingControl = AtomicInteger(NONE)
+
     /** Opening the video stream (first time and every retry) asks the host for a fresh one. */
     val videoSource = object : StreamSource {
         override val label = "USB"
@@ -141,11 +152,16 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
     }
 
     private fun sendControl(code: Int) {
-        val frame = byteArrayOf(CH_CONTROL.toByte(), 0, 1, code.toByte())
-        try {
-            synchronized(output) { output.write(frame) }
-        } catch (_: IOException) {
-            shutdown()
+        pendingControl.set(code)
+        writer.execute {
+            val next = pendingControl.getAndSet(NONE)
+            if (next == NONE) return@execute
+            val frame = byteArrayOf(CH_CONTROL.toByte(), 0, 1, next.toByte())
+            try {
+                output.write(frame)
+            } catch (_: IOException) {
+                shutdown()
+            }
         }
     }
 
@@ -196,6 +212,7 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
         alive = false
         video.fail()
         cursor.fail()
+        writer.shutdownNow()
         try {
             pfd.close()
         } catch (_: IOException) {
@@ -211,6 +228,7 @@ class UsbLink(private val pfd: ParcelFileDescriptor) : Closeable {
         const val CTL_RESUME = 1
         const val CTL_PAUSE = 2
         const val CTL_ASK = 1
+        const val NONE = -1
         val SYNC_MAGIC = "LGRV-SYNC-v1\u0000\u0000\u0000\u0000".toByteArray(Charsets.ISO_8859_1)
     }
 }

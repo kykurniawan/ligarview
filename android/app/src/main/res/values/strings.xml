@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ligarview</string>
+    <string name="tagline">Use this tablet as a second display for your Mac.</string>
+
+    <!-- Connection status -->
+    <string name="status_idle_title">Not connected</string>
+    <string name="status_idle_body">Connect the tablet to your Mac with a USB cable, or over Wi-Fi.</string>
+    <string name="status_cable_title">Cable detected</string>
+    <string name="status_cable_body">Start the Ligarview host on your Mac. This tablet connects on its own.</string>
+    <string name="status_mac_title">Mac detected</string>
+    <string name="status_mac_body">The Mac is ready over USB. Tap Connect to start the display.</string>
+    <string name="status_permission_title">Allow USB access</string>
+    <string name="status_permission_body">Android is asking whether Ligarview may use the USB accessory. Tap OK on the dialog.</string>
+    <string name="status_connecting_title">Connecting to your Mac…</string>
+    <string name="status_connecting_usb">Over the USB cable</string>
+    <string name="status_connecting_net">Reaching %1$s</string>
+    <string name="status_connected_title">Connected</string>
+    <string name="status_connected_body">Starting the picture · %1$s</string>
+    <string name="status_wait_title">Waiting for your Mac…</string>
+    <string name="status_wait_body">Start the Ligarview host on your Mac. This tablet connects as soon as it is ready.</string>
+    <string name="status_retry_title">Connection lost</string>
+    <string name="status_retry_body">Trying again. Make sure the Ligarview host is running on your Mac. (%1$s)</string>
+
+    <!-- Connect section -->
+    <string name="section_connect">Connect to your Mac</string>
+    <string name="tab_usb">USB cable</string>
+    <string name="tab_wifi">Wi-Fi</string>
+    <string name="step1_title">Start the Ligarview host on your Mac</string>
+    <string name="step1_body">It creates the extra display and waits for the tablet.</string>
+    <string name="step2_title">Plug the tablet into the Mac</string>
+    <string name="step2_body">Use a cable that carries data, not a charge-only one.</string>
+    <string name="step2_detected">Cable detected</string>
+    <string name="step3_title">Tap OK when Android asks to open Ligarview</string>
+    <string name="step3_body">Tick “Use by default” and it will not ask again.</string>
+    <string name="usb_connect_now">Connect over USB</string>
+    <string name="usb_note">No USB debugging or developer mode needed.</string>
+    <string name="wifi_field_label">Mac address</string>
+    <string name="wifi_field_hint">192.168.1.10:7878</string>
+    <string name="wifi_connect">Connect</string>
+    <string name="wifi_help">Both devices must be on the same network. 5 GHz Wi-Fi works best. You can find the Mac’s address in System Settings › Network.</string>
+    <string name="wifi_dev">Developer: with adb reverse, use 127.0.0.1:7878.</string>
+
+    <!-- Recommendations -->
+    <string name="section_ready">Before you start</string>
+    <string name="ready_all_set">All set. Your tablet is ready.</string>
+    <string name="ready_summary">%1$d of %2$d recommendations done</string>
+
+    <string name="rec_refresh_ok_title">High refresh rate is on</string>
+    <string name="rec_refresh_ok_body">The display runs at %1$d Hz, so the cursor and window dragging feel smooth.</string>
+    <string name="rec_refresh_warn_title">Turn on the high refresh rate</string>
+    <string name="rec_refresh_warn_body">The display runs at %1$d Hz but supports up to %2$d Hz. In Settings › Display › Motion smoothness, choose Adaptive (or High).</string>
+    <string name="rec_refresh_info_title">Display refresh rate</string>
+    <string name="rec_refresh_info_body">This display runs at %1$d Hz.</string>
+    <string name="action_open_display">Open display settings</string>
+
+    <string name="rec_power_ok_title">Power saving is off</string>
+    <string name="rec_power_ok_body">Nothing is limiting the display or the processor.</string>
+    <string name="rec_power_warn_title">Turn off power saving</string>
+    <string name="rec_power_warn_body">Power saving lowers the refresh rate and slows the video decoder. Switch it off while you use the tablet as a monitor.</string>
+    <string name="action_open_battery">Open battery settings</string>
+
+    <string name="rec_bg_ok_title">Allowed to run in the background</string>
+    <string name="rec_bg_ok_body">Android will not close Ligarview to save battery.</string>
+    <string name="rec_bg_warn_title">Keep Ligarview from being closed</string>
+    <string name="rec_bg_warn_body">Android can close idle apps overnight. Exclude Ligarview from battery optimization (on Samsung: Battery › Background usage limits › Never auto sleeping apps).</string>
+    <string name="action_open_bg">Open battery optimization</string>
+
+    <string name="rec_cable_title">Use a good cable</string>
+    <string name="rec_cable_body">USB 2 is enough. A USB 3 cable and port give extra headroom. The tablet charges over the same cable.</string>
+
+    <string name="footer_tip">While streaming, long-press the picture for statistics. Back returns to this screen.</string>
+    <string name="footer_version">Version %1$s</string>
+</resources>

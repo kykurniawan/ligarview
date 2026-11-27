@@ -1,70 +1,115 @@
 package app.ligarview.client
 
-import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.hardware.usb.UsbManager
 import android.graphics.Color
+import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.text.InputType
+import android.provider.Settings
 import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.widget.Button
-import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.compose.ui.platform.ComposeView
+import app.ligarview.client.ui.Actions
+import app.ligarview.client.ui.DeviceChecks
+import app.ligarview.client.ui.InfoOverlay
+import app.ligarview.client.ui.LigarviewTheme
+import app.ligarview.client.ui.LinkPhase
+import app.ligarview.client.ui.Transport
+import app.ligarview.client.ui.UiState
 
-class MainActivity : Activity(), SurfaceHolder.Callback {
+/**
+ * Hosts the live picture (a SurfaceView fed by the video decoder), the Mac's cursor drawn on top,
+ * and a Compose overlay that explains how to connect and what to adjust while nothing is streaming.
+ */
+class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     private lateinit var surfaceView: SurfaceView
-    private lateinit var panel: LinearLayout
-    private lateinit var status: TextView
     private lateinit var stats: TextView
-    private lateinit var hostInput: EditText
+    private lateinit var statsMirror: ImageView
+    private lateinit var cursorOverlay: CursorOverlay
+    private lateinit var state: UiState
 
     private var client: StreamClient? = null
+
+    /** Identifies the running client; status reports from a stopped one are ignored. */
+    private var clientToken: Any? = null
     private var cursorClient: CursorClient? = null
     private lateinit var usbManager: UsbManager
     private var usbLink: UsbLink? = null
     private lateinit var permissionIntent: PendingIntent
-    private val usbReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                ACTION_USB_PERMISSION -> {
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) startClient()
-                    else status.text = "USB permission denied"
-                }
-                UsbManager.ACTION_USB_ACCESSORY_DETACHED -> onUsbDetached()
-            }
-        }
-    }
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
     /** True from the moment the stream was lost until it is live again. */
     private var graceStarted = false
     private val releaseAwake = Runnable {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
-    private lateinit var cursorOverlay: CursorOverlay
     private var surfaceReady = false
 
-    /** True while the user wants a connection (panel hidden). */
+    private val backCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            wantConnection = false
+            stopClient()
+            state.phase = LinkPhase.Idle
+            state.detail = ""
+            state.everConnected = false
+            setStatsVisible(false)
+        }
+    }
+
+    /** True while the user wants a connection. Back leaves it and returns to the information screen. */
     private var wantConnection = false
+        set(value) {
+            field = value
+            backCallback.isEnabled = value
+        }
+
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                ACTION_USB_PERMISSION -> {
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        startClient()
+                    } else {
+                        wantConnection = false
+                        state.phase = LinkPhase.Idle
+                    }
+                }
+                UsbManager.ACTION_USB_ACCESSORY_DETACHED -> onUsbDetached()
+            }
+        }
+    }
+
+    private val deviceTick = object : Runnable {
+        override fun run() {
+            state.device = DeviceChecks.read(this@MainActivity)
+            handler.postDelayed(this, DEVICE_POLL_MS)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
+        onBackPressedDispatcher.addCallback(this, backCallback)
+
+        val saved = prefs().getString(KEY_TARGET, null)
+        state = UiState(initialHost = saved.orEmpty(), startOnWifiTab = saved != null)
         buildUi()
         hideSystemBars()
 
@@ -81,13 +126,11 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             Context.RECEIVER_NOT_EXPORTED,
         )
 
-        val saved = prefs().getString(KEY_TARGET, null)
-        hostInput.setText(saved ?: DEFAULT_TARGET)
         // Connect automatically: over USB when the Mac has switched the tablet into accessory
         // mode, otherwise to the last used host.
         if (saved != null || usbManager.accessoryList?.isNotEmpty() == true) {
             wantConnection = true
-            panel.visibility = View.GONE
+            state.phase = LinkPhase.Connecting
         }
     }
 
@@ -96,7 +139,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         setIntent(intent)
         if (intent.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) {
             wantConnection = true
-            panel.visibility = View.GONE
             startClient()
         }
     }
@@ -110,6 +152,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onPause() {
         cursorOverlay.stop()
+        handler.removeCallbacks(deviceTick)
         super.onPause()
     }
 
@@ -117,6 +160,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         super.onResume()
         cursorOverlay.start()
         requestHighRefreshRate()
+        handler.post(deviceTick)
     }
 
     /**
@@ -138,6 +182,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun hideSystemBars() {
+        @Suppress("DEPRECATION")
         window.setDecorFitsSystemWindows(false)
         window.insetsController?.apply {
             hide(WindowInsets.Type.systemBars())
@@ -152,23 +197,28 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         surfaceView.holder.addCallback(this)
         root.addView(surfaceView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
-        status = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setBackgroundColor(0x99000000.toInt())
-            textSize = 14f
-            setPadding(dp(12), dp(6), dp(12), dp(6))
-            visibility = View.GONE
-        }
-        root.addView(
-            status,
-            FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply {
-                setMargins(dp(16), dp(16), dp(16), dp(16))
-            },
-        )
-
         val cursorView = CursorView(this)
         root.addView(cursorView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         cursorOverlay = CursorOverlay(cursorView, root)
+
+        val actions = Actions(
+            connect = ::connect,
+            connectUsb = {
+                state.everConnected = false
+                wantConnection = true
+                startClient()
+            },
+            openDisplaySettings = { openSettings(Settings.ACTION_DISPLAY_SETTINGS) },
+            openBatterySaver = { openSettings(Settings.ACTION_BATTERY_SAVER_SETTINGS) },
+            openBatteryOptimization = { openSettings(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) },
+        )
+        val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        root.addView(
+            ComposeView(this).apply {
+                setContent { LigarviewTheme { InfoOverlay(state, actions, versionName) } }
+            },
+            FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT),
+        )
 
         stats = TextView(this).apply {
             setTextColor(Color.GREEN)
@@ -184,8 +234,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
-        val mirror = android.widget.ImageView(this).apply {
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+        val mirror = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
             setBackgroundColor(0xFF808080.toInt())
             visibility = View.GONE
         }
@@ -195,46 +245,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
                 setMargins(dp(16), dp(70), 0, 0)
             },
         )
+        statsMirror = mirror
         cursorOverlay.mirror = mirror
-        // Long-press the picture to toggle the statistics overlay.
+        // Long-press the picture to toggle the statistics overlay (only while streaming).
         surfaceView.setOnLongClickListener {
-            stats.visibility = if (stats.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-            mirror.visibility = stats.visibility
+            if (state.phase != LinkPhase.Streaming) return@setOnLongClickListener false
+            setStatsVisible(stats.visibility != View.VISIBLE)
             true
         }
-
-        panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xEE111111.toInt())
-            setPadding(dp(32), dp(32), dp(32), dp(32))
-        }
-        panel.addView(label("Ligarview", 28f, Color.WHITE))
-        panel.addView(label("Wi-Fi / adb host address (host:port)", 14f, 0xFFAAAAAA.toInt(), top = 24))
-        hostInput = EditText(this).apply {
-            setTextColor(Color.WHITE)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            isSingleLine = true
-        }
-        panel.addView(hostInput, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        panel.addView(Button(this).apply {
-            text = "Connect"
-            setOnClickListener { connect() }
-        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(16) })
-        panel.addView(
-            label(
-                "USB: run the Ligarview host on the Mac and plug the tablet in. Android asks once whether " +
-                    "to open Ligarview for the USB accessory; accept it (tick \"use by default\" to skip the " +
-                    "question next time).\n\n" +
-                    "Wi-Fi: enter the Mac's IP address, e.g. 192.168.1.10:7878.\n" +
-                    "Developer: with USB debugging, `adb reverse tcp:7878 tcp:7878` and connect to 127.0.0.1:7878.\n\n" +
-                    "Back returns to this screen.",
-                13f, 0xFF888888.toInt(), top = 24,
-            ),
-        )
-        root.addView(
-            panel,
-            FrameLayout.LayoutParams(dp(480), WRAP_CONTENT, Gravity.CENTER),
-        )
         setContentView(root)
     }
 
@@ -266,21 +284,30 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
-    private fun label(text: String, size: Float, color: Int, top: Int = 0) = TextView(this).apply {
-        this.text = text
-        textSize = size
-        setTextColor(color)
-        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(top) }
+    private fun setStatsVisible(visible: Boolean) {
+        val v = if (visible) View.VISIBLE else View.GONE
+        stats.visibility = v
+        statsMirror.visibility = v
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun prefs() = getSharedPreferences("ligarview", Context.MODE_PRIVATE)
 
+    private fun openSettings(action: String) {
+        try {
+            startActivity(Intent(action))
+        } catch (_: Exception) {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
     private fun connect() {
-        prefs().edit().putString(KEY_TARGET, hostInput.text.toString().trim()).apply()
+        val target = state.hostText.trim()
+        if (target.isEmpty()) return
+        prefs().edit().putString(KEY_TARGET, target).apply()
+        state.everConnected = false
         wantConnection = true
-        panel.visibility = View.GONE
         startClient()
     }
 
@@ -314,27 +341,44 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             videoSource = link.videoSource
             cursorSource = link.cursorSource
             link.onHostAsk = { runOnUiThread { startClient() } }
+            state.transport = Transport.Usb
         } else if (usbManager.accessoryList?.isNotEmpty() == true) {
-            status.text = "Waiting for USB permission..."
-            status.visibility = View.VISIBLE
+            state.phase = LinkPhase.Permission
             return
         } else {
-            val (host, port) = parseTarget(hostInput.text.toString())
+            val (host, port) = parseTarget(state.hostText)
             videoSource = TcpSource(host, port)
             cursorSource = TcpSource(host, port + 1)
+            state.transport = Transport.Network
         }
-        client = StreamClient(videoSource, surfaceView.holder.surface) { message, streaming ->
-            runOnUiThread {
-                status.text = message
-                status.visibility = if (streaming) View.GONE else View.VISIBLE
-                keepScreenOn(streaming)
-            }
+        state.phase = LinkPhase.Connecting
+        val token = Any()
+        clientToken = token
+        client = StreamClient(videoSource, surfaceView.holder.surface) { status, detail ->
+            onLinkStatus(token, status, detail)
         }.also { it.start() }
         cursorClient = CursorClient(cursorSource, cursorOverlay).also { it.start() }
         cursorOverlay.enabled = true
     }
 
-    /** The cable was pulled: fall back to the saved host, or show the panel. */
+    private fun onLinkStatus(token: Any, status: LinkStatus, detail: String) {
+        runOnUiThread {
+            // A client that was stopped (Back, new connection) may still report a late status.
+            if (token !== clientToken) return@runOnUiThread
+            if (status == LinkStatus.Connected || status == LinkStatus.Streaming) state.everConnected = true
+            state.phase = when (status) {
+                LinkStatus.Connecting -> LinkPhase.Connecting
+                LinkStatus.Connected -> LinkPhase.Connected
+                LinkStatus.Streaming -> LinkPhase.Streaming
+                LinkStatus.Retrying -> LinkPhase.Retrying
+            }
+            state.detail = detail
+            if (status != LinkStatus.Streaming) setStatsVisible(false)
+            keepScreenOn(status == LinkStatus.Streaming)
+        }
+    }
+
+    /** The cable was pulled: fall back to the saved host, or return to the information screen. */
     private fun onUsbDetached() {
         usbLink?.close()
         usbLink = null
@@ -343,8 +387,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             startClient()
         } else {
             wantConnection = false
-            status.visibility = View.GONE
-            panel.visibility = View.VISIBLE
+            state.phase = LinkPhase.Idle
+            state.detail = ""
         }
     }
 
@@ -367,6 +411,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun stopClients() {
+        clientToken = null
         cursorOverlay.enabled = false
         cursorClient?.stop()
         cursorClient = null
@@ -387,18 +432,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         return t.substring(0, i) to (t.substring(i + 1).toIntOrNull() ?: DEFAULT_PORT)
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun onBackPressed() {
-        if (wantConnection) {
-            wantConnection = false
-            stopClient()
-            status.visibility = View.GONE
-            panel.visibility = View.VISIBLE
-        } else {
-            super.onBackPressed()
-        }
-    }
-
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceReady = true
         surfaceView.removeCallbacks(statsTick)
@@ -415,6 +448,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     private companion object {
         const val KEEP_AWAKE_GRACE_MS = 60_000L
+        const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
         const val KEY_TARGET = "target"
         const val DEFAULT_PORT = 7878

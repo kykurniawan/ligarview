@@ -5,8 +5,8 @@
     <uses-feature android:name="android.hardware.usb.accessory" android:required="false" />
 
     <application
-        android:label="Ligarview"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Ligarview">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"

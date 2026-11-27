@@ -8,6 +8,9 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
+/** What the stream client is doing, reported to the UI. */
+enum class LinkStatus { Connecting, Connected, Streaming, Retrying }
+
 /**
  * Connects to the Ligarview host and feeds the decoder. Reconnects automatically
  * until [stop] is called.
@@ -17,7 +20,7 @@ import kotlin.concurrent.thread
 class StreamClient(
     private val source: StreamSource,
     private val surface: Surface,
-    private val onStatus: (message: String, streaming: Boolean) -> Unit,
+    private val onStatus: (status: LinkStatus, detail: String) -> Unit,
 ) {
     @Volatile
     private var running = false
@@ -56,13 +59,13 @@ class StreamClient(
         var failures = 0
         while (running) {
             try {
-                onStatus("Connecting to ${source.label}...", false)
+                // After a failure keep showing "retrying" instead of flipping back to "connecting".
+                if (failures == 0) onStatus(LinkStatus.Connecting, source.label)
                 session { failures = 0 }
             } catch (e: Exception) {
                 failures++
                 if (running) {
-                    val why = if (e is java.net.SocketTimeoutException) "Connection lost" else e.message ?: e.javaClass.simpleName
-                    onStatus("$why. Retrying...", false)
+                    onStatus(LinkStatus.Retrying, friendlyReason(e))
                 }
             }
             if (running) {
@@ -103,7 +106,7 @@ class StreamClient(
             }
             val decoder = VideoDecoder(surface, width, height, mime).also { this.decoder = it }
             try {
-                onStatus("Connected: ${width}x$height @ $fps fps (${if (codec == CODEC_HEVC) "HEVC" else "H.264"})", false)
+                onStatus(LinkStatus.Connected, "${width}x$height @ $fps fps · ${if (codec == CODEC_HEVC) "HEVC" else "H.264"}")
                 var buffer = ByteArray(512 * 1024)
                 var first = true
                 while (running) {
@@ -118,7 +121,7 @@ class StreamClient(
                     if (decoder.feed(buffer, length, ptsUs, repeat = flags and FLAG_REPEAT != 0) && first) {
                         first = false
                         onFirstFrame()
-                        onStatus("Streaming", true)
+                        onStatus(LinkStatus.Streaming, "")
                     }
                 }
             } finally {
@@ -126,6 +129,14 @@ class StreamClient(
                 decoder.release()
             }
         }
+    }
+
+    /** A short reason for the status screen instead of an exception name or a socket error string. */
+    private fun friendlyReason(e: Exception): String = when (e) {
+        is java.net.SocketTimeoutException -> "no response from the Mac"
+        is java.net.ConnectException -> "could not connect"
+        is java.io.EOFException -> "the Mac closed the connection"
+        else -> e.message?.takeIf { it.length <= 60 } ?: "connection error"
     }
 
     private companion object {

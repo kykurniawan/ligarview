@@ -68,6 +68,17 @@ Long-press the picture to show a statistics overlay (fps, bitrate, decoder laten
 
 Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the video, `python3 tools/dump_cursor.py` prints cursor messages.
 
+## The Android app
+
+<img src="docs/info-screen.png" alt="The information screen" width="720">
+
+While nothing is streaming the app shows what it is doing and how to connect (USB steps with a live
+"cable detected" indicator, or a Wi-Fi address), plus recommendations that are read from the tablet itself:
+whether the high refresh rate is on, whether power saving is off (it lowers the refresh rate and slows the
+decoder), and whether Android may close the app in the background. Each one has a button to the right
+settings page. The screen fades away as soon as the picture starts. It is built with Jetpack Compose; the
+picture itself is a `SurfaceView` fed by the hardware decoder.
+
 ## Recovery
 
 You should not have to restart anything:
