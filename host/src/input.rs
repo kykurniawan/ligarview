@@ -16,6 +16,10 @@
 //!       dx, dy  movement since the last message, as a fraction of the display (a finger drag
 //!               moves the content by the same distance, like a trackpad with natural scrolling)
 //!
+//!   5 Pinch: phase u8 | x f32 | y f32 | ds f32
+//!       phase as for Scroll; ds is the change of the distance between two fingers as a fraction
+//!       of the display diagonal (positive = fingers moving apart = zoom in). The host sends it as
+//!       Ctrl + scroll, which is how Chromium-based apps, Figma, maps and browsers zoom.
 //!   3 Modifiers: mask u8      (bit 0 Cmd, 1 Shift, 2 Ctrl, 3 Option; the keys the tablet's sidebar
 //!       holds right now. They are added to every pointer and scroll event until the next message.)
 //!   4 Key: keycode u16 | mask u8   (press and release one key with the modifiers in `mask`;
@@ -34,6 +38,10 @@ pub const MSG_POINTER: u8 = 1;
 pub const MSG_SCROLL: u8 = 2;
 pub const MSG_MODIFIERS: u8 = 3;
 pub const MSG_KEY: u8 = 4;
+pub const MSG_PINCH: u8 = 5;
+const PINCH_LEN: usize = 14;
+/// Points of Ctrl + scroll per unit of display diagonal; tuned by hand against Figma and browsers.
+const PINCH_GAIN: f64 = 900.0;
 const POINTER_LEN: usize = 16;
 const SCROLL_LEN: usize = 18;
 
@@ -110,6 +118,25 @@ const MOD_ALL: u8 = MOD_CMD | MOD_SHIFT | MOD_CTRL | MOD_OPTION;
 const KEY_ESCAPE: u16 = 53;
 const KEY_Z: u16 = 6;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pinch {
+    pub phase: u8,
+    pub x: f32,
+    pub y: f32,
+    pub ds: f32,
+}
+
+pub fn parse_pinch(body: &[u8]) -> Option<Pinch> {
+    if body.len() != PINCH_LEN || body[0] != MSG_PINCH {
+        return None;
+    }
+    let f = |i: usize| f32::from_be_bytes([body[i], body[i + 1], body[i + 2], body[i + 3]]);
+    let unit = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
+    let ds = f(10);
+    let p = Pinch { phase: body[1], x: unit(f(2)), y: unit(f(6)), ds: if ds.is_finite() { ds.clamp(-1.0, 1.0) } else { 0.0 } };
+    (p.phase <= PH_CANCEL).then_some(p)
+}
+
 pub fn parse_modifiers(body: &[u8]) -> Option<u8> {
     (body.len() == 2 && body[0] == MSG_MODIFIERS).then(|| body[1] & MOD_ALL)
 }
@@ -153,7 +180,7 @@ const RIGHT_DRAGGED: u32 = 7;
 const FIELD_CLICK_STATE: u32 = 1;
 const FIELD_PRESSURE: u32 = 3;
 const FIELD_SCROLL_CONTINUOUS: u32 = 88;
-const HID_EVENT_TAP: u32 = 0;
+const HID_EVENT_TAP: u32 = 1; // kCGSessionEventTap; the HID tap (0) leaks event flags into the system modifier state
 const BUTTON_LEFT: u32 = 0;
 const BUTTON_RIGHT: u32 = 1;
 
@@ -176,11 +203,16 @@ extern "C" {
     fn CGEventCreateMouseEvent(source: *const (), kind: u32, at: CGPoint, button: u32) -> *mut ();
     fn CGEventSetIntegerValueField(event: *mut (), field: u32, value: i64);
     fn CGEventSetDoubleValueField(event: *mut (), field: u32, value: f64);
-    fn CGEventCreateScrollWheelEvent(source: *const (), units: u32, wheel_count: u32, wheel1: i32, wheel2: i32) -> *mut ();
+    // The `...2` variant takes its wheel values as ordinary arguments. The original is variadic, and
+    // on Apple's arm64 ABI variadic arguments live on the stack, so passing the second axis the
+    // ordinary way made it arrive as garbage.
+    fn CGEventCreateScrollWheelEvent2(source: *const (), units: u32, wheel_count: u32, wheel1: i32, wheel2: i32, wheel3: i32) -> *mut ();
     fn CGEventCreateKeyboardEvent(source: *const (), keycode: u16, down: bool) -> *mut ();
     fn CGEventGetFlags(event: *mut ()) -> u64;
     fn CGEventSetFlags(event: *mut (), flags: u64);
     fn CGEventPost(tap: u32, event: *mut ());
+    fn CGEventSourceFlagsState(state: i32) -> u64;
+    fn CGEventSourceCreate(state: i32) -> *const ();
     fn CFRelease(cf: *const std::ffi::c_void);
 }
 
@@ -256,18 +288,66 @@ struct State {
     clicks: i64,
     /// Scroll distance (in points) not yet sent because it was less than a whole pixel.
     scroll_rest: (f64, f64),
+    pinch_rest: f64,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { held: None, last_down: None, last_at: None, clicks: 0, scroll_rest: (0.0, 0.0) });
+static STATE: Mutex<State> = Mutex::new(State { held: None, last_down: None, last_at: None, clicks: 0, scroll_rest: (0.0, 0.0), pinch_rest: 0.0 });
 
 /// Tells the input handler which display is the virtual one (it changes when it is recreated).
 pub fn init(display: Arc<AtomicU32>) {
     let _ = DISPLAY.set(display);
 }
 
+/// Events come from a private source: they start without flags instead of inheriting whatever the
+/// system's combined modifier state holds. (Flags posted earlier linger in that state, so a Ctrl
+/// from a pinch would otherwise turn every later scroll into a zoom.)
+fn source() -> *const () {
+    static SOURCE: OnceLock<usize> = OnceLock::new();
+    *SOURCE.get_or_init(|| unsafe { CGEventSourceCreate(-1) } as usize) as *const ()
+}
+
+const FLAG_MASK: u64 = 0x0002_0000 | 0x0004_0000 | 0x0008_0000 | 0x0010_0000;
+
+/// Modifier keys the user really holds on the Mac's own keyboard.
+fn hardware_flags() -> u64 {
+    unsafe { CGEventSourceFlagsState(1) & FLAG_MASK }
+}
+
+/// Key codes (left, right) of the modifier behind each mask bit.
+fn modifier_keys(bit: u8) -> [u16; 2] {
+    match bit {
+        MOD_CMD => [55, 54],
+        MOD_SHIFT => [56, 60],
+        MOD_CTRL => [59, 62],
+        _ => [58, 61],
+    }
+}
+
+/// Posted flags linger in the system's modifier state until an event clears them, so after a
+/// gesture that used `mask` the modifiers are released explicitly.
+fn release_modifiers(mask: u8) {
+    let keep = flags_for(MODIFIERS.load(Ordering::Relaxed));
+    for bit in [MOD_CMD, MOD_SHIFT, MOD_CTRL, MOD_OPTION] {
+        if mask & bit == 0 {
+            continue;
+        }
+        for code in modifier_keys(bit) {
+            unsafe {
+                let e = CGEventCreateKeyboardEvent(source(), code, false);
+                if e.is_null() {
+                    continue;
+                }
+                CGEventSetFlags(e, hardware_flags() | (keep & !flags_for(bit)));
+                CGEventPost(HID_EVENT_TAP, e);
+                CFRelease(e as *const std::ffi::c_void);
+            }
+        }
+    }
+}
+
 fn post(kind: u32, at: CGPoint, button: u32, clicks: i64, pressure: f64) {
     unsafe {
-        let e = CGEventCreateMouseEvent(std::ptr::null(), kind, at, button);
+        let e = CGEventCreateMouseEvent(source(), kind, at, button);
         if e.is_null() {
             return;
         }
@@ -283,34 +363,34 @@ fn post(kind: u32, at: CGPoint, button: u32, clicks: i64, pressure: f64) {
 
 /// Adds the sidebar's modifiers to the keys the Mac itself reports as held.
 unsafe fn add_modifiers(e: *mut ()) {
-    let held = flags_for(MODIFIERS.load(Ordering::Relaxed));
-    if held != 0 {
-        CGEventSetFlags(e, CGEventGetFlags(e) | held);
-    }
+    CGEventSetFlags(e, hardware_flags() | flags_for(MODIFIERS.load(Ordering::Relaxed)));
 }
 
 fn post_key(keycode: u16, mask: u8) {
     unsafe {
         for down in [true, false] {
-            let e = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
+            let e = CGEventCreateKeyboardEvent(source(), keycode, down);
             if e.is_null() {
                 return;
             }
-            CGEventSetFlags(e, flags_for(mask));
+            CGEventSetFlags(e, hardware_flags() | flags_for(mask));
             CGEventPost(HID_EVENT_TAP, e);
             CFRelease(e as *const std::ffi::c_void);
         }
     }
 }
 
-fn post_scroll(dx: i32, dy: i32) {
+fn post_scroll(dx: i32, dy: i32, ctrl: bool) {
     unsafe {
-        let e = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 2, dy, dx);
+        let e = CGEventCreateScrollWheelEvent2(source(), 0, 2, dy, dx, 0);
         if e.is_null() {
             return;
         }
         CGEventSetIntegerValueField(e, FIELD_SCROLL_CONTINUOUS, 1);
         add_modifiers(e);
+        if ctrl {
+            CGEventSetFlags(e, CGEventGetFlags(e) | flags_for(MOD_CTRL));
+        }
         CGEventPost(HID_EVENT_TAP, e);
         CFRelease(e as *const std::ffi::c_void);
     }
@@ -318,7 +398,8 @@ fn post_scroll(dx: i32, dy: i32) {
 
 /// Lifts a button that is still held, e.g. when the tablet disconnects mid-stroke.
 pub fn release_all() {
-    MODIFIERS.store(0, Ordering::Relaxed);
+    let held = MODIFIERS.swap(0, Ordering::Relaxed);
+    release_modifiers(held | MOD_CTRL);
     let mut st = STATE.lock().unwrap();
     if let (Some(button), Some(at)) = (st.held.take(), st.last_at) {
         post(if button == BUTTON_RIGHT { RIGHT_UP } else { LEFT_UP }, at, button, st.clicks, 0.0);
@@ -334,17 +415,19 @@ fn handle_keys(body: &[u8]) {
     }
     if !access::enabled() || !access::control_enabled() {
         // Never leave modifiers stuck on while control is off.
-        MODIFIERS.store(0, Ordering::Relaxed);
+        release_modifiers(MODIFIERS.swap(0, Ordering::Relaxed));
         return;
     }
     if !trusted() {
         return;
     }
     if let Some(mask) = modifiers {
-        MODIFIERS.store(mask, Ordering::Relaxed);
+        let old = MODIFIERS.swap(mask, Ordering::Relaxed);
+        release_modifiers(old & !mask);
     }
     if let Some((keycode, mask)) = key {
         post_key(keycode, mask);
+        release_modifiers(mask);
     }
 }
 
@@ -353,10 +436,11 @@ pub fn handle(body: &[u8]) {
     if matches!(body.first(), Some(&MSG_MODIFIERS) | Some(&MSG_KEY)) {
         return handle_keys(body);
     }
-    let scroll = body.first() == Some(&MSG_SCROLL);
+    let scroll = matches!(body.first(), Some(&MSG_SCROLL) | Some(&MSG_PINCH));
     let pointer = if scroll { None } else { parse(body) };
-    let scroll_msg = if scroll { parse_scroll(body) } else { None };
-    if pointer.is_none() && scroll_msg.is_none() {
+    let scroll_msg = if body.first() == Some(&MSG_SCROLL) { parse_scroll(body) } else { None };
+    let pinch_msg = if body.first() == Some(&MSG_PINCH) { parse_pinch(body) } else { None };
+    if pointer.is_none() && scroll_msg.is_none() && pinch_msg.is_none() {
         return;
     }
     let allowed = if scroll { access::finger_enabled() } else { access::control_enabled() };
@@ -382,6 +466,34 @@ pub fn handle(body: &[u8]) {
         x: b.origin.x + x as f64 * (b.size.x - 1.0),
         y: b.origin.y + y as f64 * (b.size.y - 1.0),
     };
+    if let Some(pc) = pinch_msg {
+        let at = place(pc.x, pc.y);
+        let mut st = STATE.lock().unwrap();
+        match pc.phase {
+            PH_BEGIN => {
+                st.pinch_rest = 0.0;
+                if st.held.is_none() {
+                    post(MOVED, at, BUTTON_LEFT, 0, 0.0);
+                    st.last_at = Some(at);
+                }
+            }
+            PH_CHANGE => {
+                // Spreading the fingers (ds > 0) zooms in, which is an upward wheel (positive).
+                let y = st.pinch_rest + pc.ds as f64 * PINCH_GAIN;
+                let iy = y.trunc();
+                st.pinch_rest = y - iy;
+                if iy != 0.0 {
+                    post_scroll(0, iy as i32, true);
+                }
+            }
+            _ => {
+                st.pinch_rest = 0.0;
+                drop(st);
+                release_modifiers(MOD_CTRL);
+            }
+        }
+        return;
+    }
     if let Some(sc) = scroll_msg {
         let at = place(sc.x, sc.y);
         let mut st = STATE.lock().unwrap();
@@ -400,7 +512,7 @@ pub fn handle(body: &[u8]) {
                 let (ix, iy) = (x.trunc(), y.trunc());
                 st.scroll_rest = (x - ix, y - iy);
                 if ix != 0.0 || iy != 0.0 {
-                    post_scroll(ix as i32, iy as i32);
+                    post_scroll(ix as i32, iy as i32, false);
                 }
             }
             // End or cancel: nothing to send (no momentum), just forget the sub-point remainder.
@@ -532,6 +644,21 @@ mod tests {
         assert!(parse_key(&key(12, MOD_CMD)).is_none());
         assert!(parse_key(&[MSG_KEY, 0, 6]).is_none());
         assert_eq!(flags_for(MOD_CMD | MOD_SHIFT), 0x0010_0000 | 0x0002_0000);
+    }
+
+    #[test]
+    fn parses_a_pinch() {
+        let mut m = vec![MSG_PINCH, PH_CHANGE];
+        for v in [0.5f32, 0.5, -0.02] {
+            m.extend_from_slice(&v.to_be_bytes());
+        }
+        let p = parse_pinch(&m).unwrap();
+        assert_eq!((p.phase, p.x, p.y, p.ds), (PH_CHANGE, 0.5, 0.5, -0.02));
+        assert!(parse_pinch(&m[..13]).is_none());
+        m[1] = 7;
+        assert!(parse_pinch(&m).is_none());
+        // A pinch is not a scroll and a scroll is not a pinch.
+        assert!(parse_scroll(&m).is_none());
     }
 
     #[test]
