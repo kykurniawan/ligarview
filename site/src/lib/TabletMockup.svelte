@@ -44,7 +44,7 @@
   h4 { margin: 0; font-size: 1.15em; font-weight: 500; }
   .meta { margin: 0.5em 0 0; font-size: 1em; }
   .faint { color: #5e6773; font-size: 0.85em; margin-top: 0.2em; }
-  .preview { margin-top: 1.6em; aspect-ratio: 16 / 10; border-radius: 0.9em; background: #3a4766 url('/wallpaper.jpg') center / cover; display: grid; place-items: end start; padding: 0.8em; color: rgba(255, 255, 255, 0.6); font-size: 0.8em; }
+  .preview { margin-top: 1.6em; aspect-ratio: 16 / 10; border-radius: 0.9em; background: #3a4766 url('/desktop.jpg') center / cover; display: grid; place-items: end start; padding: 0.8em; color: rgba(255, 255, 255, 0.6); font-size: 0.8em; }
   .tabs { display: flex; gap: 1.6em; margin: 1.2em 0 1em; color: #8c95a3; }
   .tabs .on { color: #ecf0f4; box-shadow: 0 2px 0 #4fd1c5; padding-bottom: 0.4em; }
   ol, ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1em; }
