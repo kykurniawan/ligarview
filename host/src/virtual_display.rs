@@ -62,8 +62,8 @@ static SERIAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(
 /// Sleeps while servicing the main run loop. Display configuration changes are delivered
 /// through it, so a plain sleep on the main thread can leave a new display without modes.
 pub fn pump_run_loop(duration: std::time::Duration) {
-    if crate::menubar::active() {
-        crate::menubar::pump(duration);
+    if crate::gui::active() {
+        crate::gui::pump(duration);
         return;
     }
     unsafe {

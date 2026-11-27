@@ -51,10 +51,12 @@ Early work in progress.
    Defaults to a 1280x800 HiDPI display (2560x1600 real pixels, like a Retina Mac) at 60 fps, 30 Mbps.
    For a 120 Hz panel: `cargo run --release -- --fps 120 --bitrate 60`.
 
-   Or run it as a menu bar app: `tools/bundle.sh` builds `host/target/Ligarview.app` (move it to
-   Applications if you like). Its menu shows the state and lets you pick orientation, frame rate,
-   quality and codec, start it at login, and grant the Screen Recording permission. Changing a
-   setting relaunches the host with it. Settings live in `~/Library/Application Support/Ligarview/config`.
+   Or run it as an app: `tools/bundle.sh` builds `host/target/Ligarview.app` (move it to Applications
+   if you like). It has a Dock icon and a small window that shows the state and lets you pick
+   orientation, frame rate, quality and codec, start it at login, and grant the Screen Recording
+   permission. Closing the window keeps the host running; click the Dock icon to bring it back.
+   Changing a setting relaunches the host with it. Settings live in
+   `~/Library/Application Support/Ligarview/config`.
 
    Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video --no-adb`.
    `--stats` prints capture/encode rates and latencies once per second.

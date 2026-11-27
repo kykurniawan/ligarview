@@ -4,7 +4,7 @@ mod cursor;
 mod cursor_server;
 mod config;
 mod encoder;
-mod menubar;
+mod gui;
 mod protocol;
 mod server;
 mod tcp;
@@ -83,9 +83,12 @@ struct Args {
     /// Diagnostic: print every change of the system cursor for 20 seconds and exit
     #[arg(long)]
     cursor_watch: bool,
-    /// Run as a menu bar app (default when started from Ligarview.app); settings come from the menu
+    /// Run with the small settings window (default when started from Ligarview.app)
     #[arg(long)]
-    menubar: bool,
+    gui: bool,
+    /// With the window: start without showing it (used when launching at login)
+    #[arg(long)]
+    background: bool,
     /// Test helper: move the cursor around the virtual display so frames change
     #[arg(long)]
     wiggle: bool,
@@ -178,8 +181,8 @@ fn start_capture(
 
 fn main() -> Result<()> {
     let mut a = Args::parse();
-    let menubar = a.menubar || menubar::launched_from_bundle();
-    if menubar {
+    let gui = a.gui || gui::launched_from_bundle();
+    if gui {
         let c = config::Config::load();
         a.portrait = c.portrait;
         a.fps = c.fps;
@@ -227,9 +230,9 @@ fn main() -> Result<()> {
         CodecArg::Hevc => encoder::Codec::Hevc,
     };
 
-    if menubar {
+    if gui {
         let c = config::Config::load();
-        menubar::init(&c, (px_w, px_h), if c.hevc { "HEVC" } else { "H.264" });
+        gui::init(&c, (px_w, px_h), if c.hevc { "HEVC" } else { "H.264" }, !a.background);
     }
     let mut vd = Some(create_display(&a, false)?);
     for (id, w, h) in VirtualDisplay::active_displays() {
@@ -266,7 +269,7 @@ fn main() -> Result<()> {
     let mut capture = match start_capture(&a, codec, display_id.load(Ordering::Relaxed), &tx, &info_tx, &key_request) {
         Ok(c) => Some(c),
         // The menu bar app keeps running without the Screen Recording permission and says so.
-        Err(e) if menubar => {
+        Err(e) if gui => {
             println!("capture not started: {e}");
             None
         }
@@ -288,15 +291,15 @@ fn main() -> Result<()> {
             println!("{m}");
         }
         pump_run_loop(Duration::from_millis(100));
-        if menubar {
+        if gui {
             let status = if capture.is_none() {
-                menubar::Status::Starting
+                gui::Status::Starting
             } else if video.has_client() {
-                menubar::Status::Streaming
+                gui::Status::Streaming
             } else {
-                menubar::Status::Waiting
+                gui::Status::Waiting
             };
-            menubar::tick(status);
+            gui::tick(status);
         }
 
         // Supervisor: rebuild the display and capture if either went away
@@ -345,8 +348,8 @@ fn main() -> Result<()> {
                             // Keep the menu alive while waiting (e.g. for the Screen Recording permission).
                             for _ in 0..20 {
                                 pump_run_loop(Duration::from_millis(100));
-                                if menubar {
-                                    menubar::tick(menubar::Status::Starting);
+                                if gui {
+                                    gui::tick(gui::Status::Starting);
                                 }
                             }
                         }
