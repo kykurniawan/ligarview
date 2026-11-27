@@ -37,5 +37,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 
-codesign --force --deep --sign - "$APP"
+# A requirement on the identifier alone keeps the Screen Recording permission across rebuilds
+# (an ad-hoc signature is otherwise tied to the exact binary).
+codesign --force --deep --sign - -r='designated => identifier "app.ligarview.host"' "$APP"
 echo "Built $APP"
