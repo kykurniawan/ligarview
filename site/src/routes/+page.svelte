@@ -1,5 +1,5 @@
 <script>
-  import Scene from '$lib/Scene.svelte';
+  import Stage from '$lib/Stage.svelte';
   import MacMockup from '$lib/MacMockup.svelte';
   import TabletMockup from '$lib/TabletMockup.svelte';
   const features = [
@@ -30,7 +30,7 @@
       <a class="primary" href="/docs/install">Get started</a>
       <a class="secondary" href="https://github.com/kykurniawan/ligarview">View on GitHub</a>
     </div>
-    <div class="stage"><div class="glow"></div><div class="panel"><Scene /></div></div>
+    <div class="stage"><div class="glow"></div><div class="panel"><Stage /></div></div>
   </section>
 
   <section class="numbers" aria-label="Measured on a Galaxy Tab S9 and an M1 Pro Mac">

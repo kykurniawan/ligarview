@@ -23,5 +23,3 @@ site/node_modules/
 site/build/
 site/.svelte-kit/
 
-# Third-party preview assets (licence unconfirmed): never commit
-site/static/preview/
