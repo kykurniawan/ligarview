@@ -34,6 +34,13 @@ Early work in progress.
 - [x] Android client (MediaCodec low-latency decode, fullscreen)
 - [ ] Latency and quality tuning
 
+## Download
+
+Get `Ligarview-<version>-macos-arm64.dmg` and `Ligarview-<version>.apk` from the
+[latest release](https://github.com/kykurniawan/ligarview/releases/latest). The builds are unsigned (not
+notarized by Apple), so macOS asks you to confirm the first launch; see the
+[install guide](https://ligarview.rizkykurniawan.id/docs/install). The sections below are for building from source.
+
 ## Requirements
 
 - macOS 14+ (developed on macOS 15), Apple Silicon
@@ -53,8 +60,8 @@ Early work in progress.
    Defaults to a 1280x800 HiDPI display (2560x1600 real pixels, like a Retina Mac) at 60 fps, 30 Mbps.
    For a 120 Hz panel: `cargo run --release -- --fps 120 --bitrate 60`.
 
-   Or run it as an app: `tools/bundle.sh` builds `host/target/Ligarview.app` (move it to Applications
-   if you like). It has a Dock icon and a small window that shows the state and lets you pick
+   Or run it as an app: `tools/bundle.sh` builds `host/target/Ligarview.app` and `tools/dmg.sh` the disk image
+   (move the app to Applications if you like). It has a Dock icon and a small window that shows the state and lets you pick
    orientation, frame rate, quality and codec, start it at login, and grant the Screen Recording
    permission. Closing the window keeps the host running; click the Dock icon to bring it back.
    Changing a setting relaunches the host with it. Settings live in
@@ -63,7 +70,7 @@ Early work in progress.
    Options: `--width --height --scale --fps --bitrate <Mbps> --port --stats --codec --low-latency-rc --cursor-in-video --no-adb`.
    `--stats` prints capture/encode rates and latencies once per second.
 
-2. Android: build and install the app (`cd android && ./gradlew installDebug`).
+2. Android: install the `.apk` from the release, or build it (`tools/apk.sh`, or `cd android && ./gradlew installDebug` with USB debugging on).
 3. Connect:
    - **USB (default, plug and play)**: nothing to enable on the tablet, no USB debugging, no adb. Plug the
      cable in; the host notices the tablet, switches it into USB accessory mode and Android asks once

@@ -79,8 +79,11 @@
 
   <section class="block end center">
     <h2>Get started</h2>
-    <p>Build the Mac app and the Android app from source in a few minutes.</p>
-    <div class="cta"><a class="primary" href="/docs/install">Read the install guide</a></div>
+    <p>Download the Mac app and the Android app and be up and running in a couple of minutes. No build tools needed.</p>
+    <div class="cta">
+      <a class="primary" href="/docs/install">Read the install guide</a>
+      <a class="secondary" href="https://github.com/kykurniawan/ligarview/releases/latest">Latest release</a>
+    </div>
   </section>
 </main>
 

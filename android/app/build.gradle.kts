@@ -17,9 +17,24 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release key: set LIGARVIEW_KEYSTORE (path), LIGARVIEW_KEYSTORE_PASSWORD, LIGARVIEW_KEY_ALIAS and
+    // LIGARVIEW_KEY_PASSWORD. Without them the release build is signed with the debug key so it still installs.
+    val keystore = System.getenv("LIGARVIEW_KEYSTORE")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("LIGARVIEW_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("LIGARVIEW_KEY_ALIAS")
+                keyPassword = System.getenv("LIGARVIEW_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     buildFeatures {

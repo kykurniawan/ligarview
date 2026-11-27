@@ -1,39 +1,47 @@
 # Install
 
-There are no prebuilt releases yet, so both apps are built from source. Clone the repository first:
+Download both apps from the [latest release](https://github.com/kykurniawan/ligarview/releases/latest):
+
+- `Ligarview-<version>-macos-arm64.dmg` for the Mac (Apple Silicon, macOS 14 or newer)
+- `Ligarview-<version>.apk` for the Android tablet (Android 11 or newer)
+
+The builds are not signed with an Apple Developer ID and are not notarized, and the APK is signed with the project's own key rather than distributed through Google Play. Both therefore show a one-time warning, described below. `SHA256SUMS` in the release lets you check your downloads.
+
+## The Mac app
+
+1. Open the `.dmg` and drag **Ligarview** into **Applications**.
+2. Open it. macOS says it cannot verify the app. Open **System Settings → Privacy & Security**, scroll to **Security** and press **Open Anyway** next to Ligarview, then confirm. Or remove the quarantine flag once from a terminal:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Ligarview.app
+   ```
+
+3. Allow **Screen Recording** when asked, in **System Settings → Privacy & Security → Screen & System Audio Recording**, then open the app again.
+
+## The Android app
+
+1. Download the `.apk` on the tablet, or copy it over and open it from the Files app.
+2. Android asks to let that app (your browser or Files) install unknown apps. Allow it for this install.
+3. If Play Protect warns about an unrecognized app, choose **More details → Install anyway**.
+
+No USB debugging or developer mode is needed, then or later. To update, install the newer `.apk` over the old one.
+
+<p class="note">Next: <a href="/docs/connect">connect the tablet</a>.</p>
+
+## Build from source
+
+For development. Clone the repository first:
 
 ```bash
 git clone https://github.com/kykurniawan/ligarview.git
 cd ligarview
 ```
 
-## The Mac app
-
-Needs [Rust](https://rustup.rs) (stable) and Xcode's command line tools.
-
-```bash
-tools/bundle.sh
-open host/target/Ligarview.app
-```
-
-`bundle.sh` builds the host and wraps it as `Ligarview.app` with an icon. Move it to **Applications** if you like. The first launch asks for **Screen Recording**: allow it in **System Settings → Privacy & Security → Screen & System Audio Recording**, then open the app again.
-
-You can also run the host straight from a terminal, without the window:
+**Mac app.** Needs [Rust](https://rustup.rs) (stable) and Xcode's command line tools. `tools/bundle.sh` builds `host/target/Ligarview.app`; `tools/dmg.sh` also produces the disk image in `dist/`. You can also run the host straight from a terminal, without the window:
 
 ```bash
 cd host
 cargo run --release
 ```
 
-## The Android app
-
-Needs the Android SDK and JDK 17 or newer. With the tablet connected and USB debugging on **just for this install**:
-
-```bash
-cd android
-./gradlew installDebug
-```
-
-Or build the APK with `./gradlew assembleDebug` and copy `android/app/build/outputs/apk/debug/app-debug.apk` to the tablet any way you like. USB debugging is only needed to install; running Ligarview never needs it.
-
-<p class="note">Next: <a href="/docs/connect">connect the tablet</a>.</p>
+**Android app.** Needs the Android SDK and JDK 17 or newer. `tools/apk.sh` builds `dist/Ligarview-<version>.apk`, signed with the debug key unless the `LIGARVIEW_KEYSTORE*` variables point at a release key. To install straight onto a tablet with USB debugging on, run `./gradlew installDebug` in `android/`.
