@@ -56,11 +56,13 @@ class StreamClient(
     }
 
     private fun loop() {
+        var failures = 0
         while (running) {
             try {
                 onStatus("Connecting to $host:$port...", false)
-                session()
+                session { failures = 0 }
             } catch (e: Exception) {
+                failures++
                 if (running) {
                     val why = if (e is java.net.SocketTimeoutException) "Connection lost" else e.message ?: e.javaClass.simpleName
                     onStatus("$why. Retrying...", false)
@@ -68,7 +70,8 @@ class StreamClient(
             }
             if (running) {
                 try {
-                    Thread.sleep(RETRY_DELAY_MS)
+                    // Retry every second at first, then back off while the host stays away.
+                    Thread.sleep(if (failures < 10) RETRY_DELAY_MS else LONG_RETRY_DELAY_MS)
                 } catch (_: InterruptedException) {
                     return
                 }
@@ -76,7 +79,7 @@ class StreamClient(
         }
     }
 
-    private fun session() {
+    private fun session(onFirstFrame: () -> Unit) {
         val sock = Socket().also { socket = it }
         sock.use {
             it.tcpNoDelay = true
@@ -123,6 +126,7 @@ class StreamClient(
                     bytesReceived.addAndGet(length + 13L)
                     if (decoder.feed(buffer, length, ptsUs, repeat = flags and FLAG_REPEAT != 0) && first) {
                         first = false
+                        onFirstFrame()
                         onStatus("Streaming", true)
                     }
                 }
@@ -143,6 +147,7 @@ class StreamClient(
         const val READ_TIMEOUT_MS = 4000
         const val CONNECT_TIMEOUT_MS = 3000
         const val RETRY_DELAY_MS = 1000L
+        const val LONG_RETRY_DELAY_MS = 5000L
         const val MAX_FRAME_BYTES = 16 * 1024 * 1024
     }
 }

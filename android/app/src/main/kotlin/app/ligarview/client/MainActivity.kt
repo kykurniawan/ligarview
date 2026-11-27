@@ -29,6 +29,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     private var client: StreamClient? = null
     private var cursorClient: CursorClient? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    /** True from the moment the stream was lost until it is live again. */
+    private var graceStarted = false
+    private val releaseAwake = Runnable {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
     private lateinit var cursorOverlay: CursorOverlay
     private var surfaceReady = false
 
@@ -37,7 +43,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
@@ -234,10 +239,29 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             runOnUiThread {
                 status.text = message
                 status.visibility = if (streaming) View.GONE else View.VISIBLE
+                keepScreenOn(streaming)
             }
         }.also { it.start() }
         cursorClient = CursorClient(host, port + 1, cursorOverlay).also { it.start() }
         cursorOverlay.enabled = true
+    }
+
+    /**
+     * The tablet is a monitor, so the screen stays on while the stream is live. When the host is
+     * gone for a minute the flag is dropped so an unattended tablet can go to sleep instead of
+     * showing "Retrying..." all night.
+     */
+    private fun keepScreenOn(streaming: Boolean) {
+        if (streaming) {
+            handler.removeCallbacks(releaseAwake)
+            graceStarted = false
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else if (!graceStarted) {
+            // Started once; retries that keep reporting "not streaming" must not restart it.
+            graceStarted = true
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            handler.postDelayed(releaseAwake, KEEP_AWAKE_GRACE_MS)
+        }
     }
 
     private fun stopClient() {
@@ -282,6 +306,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private companion object {
+        const val KEEP_AWAKE_GRACE_MS = 60_000L
         const val KEY_TARGET = "target"
         const val DEFAULT_PORT = 7878
         const val DEFAULT_TARGET = "127.0.0.1:$DEFAULT_PORT"
