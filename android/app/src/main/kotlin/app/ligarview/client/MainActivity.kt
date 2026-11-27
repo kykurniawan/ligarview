@@ -127,9 +127,11 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
         onBackPressedDispatcher.addCallback(this, backCallback)
 
-        val saved = prefs().getString(KEY_TARGET, null)
+        // Older versions let the user type an address and saved it; it is no longer used.
+        prefs().edit().remove(KEY_TARGET).apply()
         val secret = prefs().getString(KEY_SECRET, "").orEmpty()
-        state = UiState(initialHost = saved.orEmpty(), initialCode = newCode(), startOnWifiTab = saved != null || secret.length == CODE_LENGTH)
+        state = UiState(initialCode = newCode(), startOnWifiTab = secret.length == CODE_LENGTH)
+        intent.getStringExtra(EXTRA_HOST)?.let { state.hostText = it.trim() }
         discovery = NsdDiscovery(this, ::onMacFound)
         pairingServer = PairingServer(this, { state.pairingCode }, ::onPaired)
         buildUi()
@@ -150,7 +152,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         // Connect automatically: over USB when the Mac has switched the tablet into accessory
         // mode, otherwise to the last used host.
-        if (hasWifiPlan() || usbManager.accessoryList?.isNotEmpty() == true) {
+        if (hasWifiPlan() || state.hostText.isNotEmpty() || usbManager.accessoryList?.isNotEmpty() == true) {
             wantConnection = true
             state.phase = LinkPhase.Connecting
         }
@@ -159,6 +161,15 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Developer route: `am start ... --es host 127.0.0.1:7878` connects to that address (adb reverse).
+        intent.getStringExtra(EXTRA_HOST)?.let {
+            state.hostText = it.trim()
+            userStopped = false
+            state.everConnected = false
+            wantConnection = true
+            startClient()
+            return
+        }
         if (intent.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) {
             wantConnection = true
             startClient()
@@ -238,7 +249,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         cursorOverlay = CursorOverlay(cursorView, root)
 
         val actions = Actions(
-            connect = ::connect,
             connectUsb = {
                 userStopped = false
                 state.everConnected = false
@@ -462,7 +472,7 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun secret() = prefs().getString(KEY_SECRET, "").orEmpty()
 
-    private fun hasWifiPlan() = prefs().getString(KEY_TARGET, null) != null || secret().length == CODE_LENGTH
+    private fun hasWifiPlan() = secret().length == CODE_LENGTH
 
     private fun newCode() = (100_000 + java.security.SecureRandom().nextInt(900_000)).toString()
 
@@ -495,15 +505,6 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         } else if (state.transport != Transport.Usb && activeTarget != "${mac.host}:${mac.port}") {
             startClient()
         }
-    }
-
-    private fun connect() {
-        val manual = state.hostText.trim()
-        prefs().edit().apply { if (manual.isEmpty()) remove(KEY_TARGET) else putString(KEY_TARGET, manual) }.apply()
-        userStopped = false
-        state.everConnected = false
-        wantConnection = true
-        startClient()
     }
 
     /** The USB accessory link, opened on demand. Null when none is attached or permission is pending. */
@@ -665,7 +666,9 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         const val PREVIEW_RADIUS_DP = 12
         const val DEVICE_POLL_MS = 1500L
         const val ACTION_USB_PERMISSION = "app.ligarview.client.USB_PERMISSION"
+        /** Saved by older versions; only cleared now. */
         const val KEY_TARGET = "manual_address"
+        const val EXTRA_HOST = "host"
         const val KEY_SECRET = "pairing_secret"
         const val CODE_LENGTH = 6
         const val DEFAULT_PORT = 7878

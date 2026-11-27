@@ -55,11 +55,12 @@ enum Control {
     Tablet,
     Input,
     Finger,
+    Connection,
 }
 
 impl Control {
     fn from_tag(t: isize) -> Self {
-        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input, Self::Finger][t as usize]
+        [Self::Orientation, Self::FrameRate, Self::Quality, Self::Codec, Self::Login, Self::Permission, Self::Sharing, Self::Pair, Self::Unpair, Self::Tablet, Self::Input, Self::Finger, Self::Connection][t as usize]
     }
 }
 
@@ -126,6 +127,7 @@ struct Gui {
     tablet_row: Retained<NSStackView>,
     code_row: Retained<NSStackView>,
     unpair: Retained<NSButton>,
+    connection: Retained<NSPopUpButton>,
     login: Retained<NSButton>,
     input: Retained<NSButton>,
     finger: Retained<NSButton>,
@@ -135,7 +137,7 @@ struct Gui {
     quality: Retained<NSPopUpButton>,
     codec: Retained<NSPopUpButton>,
     config: Config,
-    shown: Option<(Status, bool, bool, String)>,
+    shown: Option<(Status, bool, bool, String, bool)>,
 }
 
 thread_local! {
@@ -265,6 +267,10 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
     let tablet_row = row(mtm, "Tablet", &tablet);
     let code_row = row(mtm, "Code", &code_row);
 
+    // How the tablet connects. Wi-Fi shows the pairing controls; USB needs none of them.
+    let connection = popup(mtm, &handler, Control::Connection, &["USB cable".into(), "Wi-Fi".into()], config.wifi as usize);
+    let connection_row = row(mtm, "Connection", &connection);
+
     // Settings.
     let orientation = popup(mtm, &handler, Control::Orientation, &["Landscape".into(), "Portrait".into()], config.portrait as usize);
     let fps_names: Vec<String> = FPS_CHOICES.iter().map(|f| format!("{f} fps")).collect();
@@ -292,7 +298,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
         row(mtm, "Quality", &quality),
         row(mtm, "Codec", &codec_popup),
     ];
-    let mut views: Vec<&NSView> = vec![&header, &permission_row, &sharing_row, &tablet_row, &code_row, &message];
+    let mut views: Vec<&NSView> = vec![&header, &permission_row, &connection_row, &sharing_row, &tablet_row, &code_row, &message];
     views.extend(rows.iter().map(|r| &***r));
     views.push(&login);
     views.push(&input);
@@ -349,6 +355,7 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str, show: bool) {
             tablet_row,
             code_row,
             unpair,
+            connection,
             login,
             input,
             finger,
@@ -441,13 +448,15 @@ pub fn tick(status: Status) {
         gui.sharing.setTitle(&s(if status == Status::Off { "Start sharing" } else { "Stop sharing" }));
         let paired = crate::access::code() != 0;
         let name = crate::access::tablet();
-        if gui.shown != Some((status, access, paired, name.clone())) {
-            gui.shown = Some((status, access, paired, name.clone()));
-            let who = if name.is_empty() { "the tablet".to_string() } else { name.clone() };
+        let wifi = gui.config.wifi;
+        if gui.shown != Some((status, access, paired, name.clone(), wifi)) {
+            gui.shown = Some((status, access, paired, name.clone(), wifi));
+            let who = if name.is_empty() || !wifi { "the tablet".to_string() } else { name.clone() };
             let (text, color) = match (status, access) {
                 (Status::Off, _) => ("Sharing is off", NSColor::systemOrangeColor()),
                 (_, false) => ("Needs Screen Recording permission", NSColor::systemOrangeColor()),
                 (Status::Starting, _) => ("Starting…", NSColor::secondaryLabelColor()),
+                (Status::Waiting, _) if !wifi => ("Waiting for the tablet on the USB cable", NSColor::secondaryLabelColor()),
                 (Status::Waiting, _) if paired => (&*format!("Waiting for {who}"), NSColor::secondaryLabelColor()),
                 (Status::Waiting, _) => ("Not paired yet", NSColor::secondaryLabelColor()),
                 (Status::Streaming, _) => (&*format!("Streaming to {who}"), NSColor::systemGreenColor()),
@@ -456,10 +465,10 @@ pub fn tick(status: Status) {
             gui.status.setTextColor(Some(&color));
             // Pairing controls only matter while nothing is paired; Unpair only while something is.
             gui.permission_row.setHidden(access);
-            gui.tablet_row.setHidden(paired);
-            gui.code_row.setHidden(paired);
-            gui.message.setHidden(paired);
-            gui.unpair.setHidden(!paired);
+            gui.tablet_row.setHidden(!wifi || paired);
+            gui.code_row.setHidden(!wifi || paired);
+            gui.message.setHidden(!wifi || paired);
+            gui.unpair.setHidden(!wifi || !paired);
             // The window grows or shrinks with what is shown.
             if let Some(root) = gui.window.contentView() {
                 let size = root.fittingSize();
@@ -548,12 +557,13 @@ impl Gui {
                     .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
                     .spawn();
             }
+            Control::Connection => self.config.wifi = value == 1,
             Control::Orientation => self.config.portrait = value == 1,
             Control::Codec => self.config.hevc = value == 1,
             Control::FrameRate => self.config.fps = FPS_CHOICES[value as usize],
             Control::Quality => self.config.bitrate = BITRATE_CHOICES[value as usize].0,
         }
-        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec);
+        let _ = (&self.orientation, &self.fps, &self.quality, &self.codec, &self.connection);
         self.config.code = crate::access::code();
         self.config.tablet = crate::access::tablet();
         self.config.sharing = crate::access::enabled();

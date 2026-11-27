@@ -39,13 +39,11 @@
     <string name="step3_body">Tick “Use by default” and it will not ask again.</string>
     <string name="usb_connect_now">Connect over USB</string>
     <string name="usb_note">No USB debugging or developer mode needed.</string>
-    <string name="wifi_field_label">Address (optional)</string>
-    <string name="wifi_field_hint">Only if your Mac is not found, e.g. 192.168.1.10:7878</string>
     <string name="wifi_help">On your Mac, open Ligarview, choose this tablet and enter the code below, then press Connect. After that the tablet reconnects by itself whenever the Mac is sharing. Both devices must be on the same network; 5 GHz Wi-Fi works best.</string>
     <string name="wifi_code_label">Code for your Mac</string>
     <string name="wifi_found">Mac found: %1$s</string>
-    <string name="wifi_searching">Waiting for your Mac…</string>
-    <string name="wifi_usb_note">With the USB cable plugged in, the tablet uses USB. Unplug it to use Wi-Fi.</string>
+    <string name="wifi_searching">Looking for your Mac on this network…</string>
+    <string name="wifi_usb_active">Using the USB cable. Unplug it to connect over Wi-Fi.</string>
 
     <!-- Recommendations -->
     <string name="section_ready">Before you start</string>

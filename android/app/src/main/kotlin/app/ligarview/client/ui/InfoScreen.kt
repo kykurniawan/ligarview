@@ -26,14 +26,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,8 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.ligarview.client.R
 import kotlin.math.roundToInt
@@ -164,7 +158,7 @@ private fun Status(state: UiState, actions: Actions) {
             body = if (state.transport == Transport.Usb) {
                 stringResource(R.string.status_connecting_usb)
             } else {
-                stringResource(R.string.status_connecting_net, state.hostText)
+                stringResource(R.string.status_connecting_net, state.foundMac ?: state.hostText)
             }
             color = Palette.Warning
         }
@@ -292,6 +286,10 @@ private fun ConnectSection(state: UiState, actions: Actions) {
             Transport.None -> Unit
         }
     }
+    // Plugging the cable in shows its instructions rather than the Wi-Fi pairing code.
+    LaunchedEffect(state.device.usbCableConnected) {
+        if (state.device.usbCableConnected) tab = 0
+    }
     SectionTitle(stringResource(R.string.section_connect))
     Spacer(Modifier.height(14.dp))
     TextTabs(
@@ -333,19 +331,6 @@ private fun UsbSteps(state: UiState, actions: Actions) {
 
 @Composable
 private fun WifiForm(state: UiState, actions: Actions) {
-    val fieldColors = TextFieldDefaults.colors(
-        focusedContainerColor = Palette.Surface,
-        unfocusedContainerColor = Palette.Surface,
-        focusedIndicatorColor = Palette.Accent,
-        unfocusedIndicatorColor = Color.Transparent,
-        focusedLabelColor = Palette.Accent,
-        unfocusedLabelColor = Palette.TextDim,
-        cursorColor = Palette.Accent,
-        focusedTextColor = Palette.Text,
-        unfocusedTextColor = Palette.Text,
-        focusedPlaceholderColor = Palette.TextFaint,
-        unfocusedPlaceholderColor = Palette.TextFaint,
-    )
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.wifi_help), style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -357,28 +342,29 @@ private fun WifiForm(state: UiState, actions: Actions) {
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
             )
         }
+        // With the cable plugged in the tablet uses it, so "looking for your Mac" would mislead.
+        val onCable = state.transport == Transport.Usb || state.device.usbCableConnected
         val mac = state.foundMac
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            StatusMark(if (mac != null) Palette.Success else Palette.TextFaint, size = 8.dp)
-            Text(
-                if (mac != null) stringResource(R.string.wifi_found, mac) else stringResource(R.string.wifi_searching),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (mac != null) Palette.Success else Palette.TextDim,
-            )
+            when {
+                onCable -> {
+                    StatusMark(Palette.Info, size = 8.dp)
+                    Text(
+                        stringResource(R.string.wifi_usb_active),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Palette.Info,
+                    )
+                }
+                mac != null -> {
+                    StatusMark(Palette.Success, size = 8.dp)
+                    Text(stringResource(R.string.wifi_found, mac), style = MaterialTheme.typography.bodySmall, color = Palette.Success)
+                }
+                else -> {
+                    StatusMark(Palette.TextFaint, size = 8.dp)
+                    Text(stringResource(R.string.wifi_searching), style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
+                }
+            }
         }
-        TextField(
-            value = state.hostText,
-            onValueChange = { state.hostText = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.wifi_field_label)) },
-            placeholder = { Text(stringResource(R.string.wifi_field_hint)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { actions.connect() }),
-            shape = MaterialTheme.shapes.medium,
-            colors = fieldColors,
-        )
-        Text(stringResource(R.string.wifi_usb_note), style = MaterialTheme.typography.bodySmall, color = Palette.TextFaint)
     }
 }
 

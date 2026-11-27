@@ -22,7 +22,7 @@ data class DeviceInfo(
 
 /** Everything the Compose screens read. The activity writes it, the UI only observes it. */
 @Stable
-class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Boolean) {
+class UiState(initialCode: String, val startOnWifiTab: Boolean) {
     var phase by mutableStateOf(LinkPhase.Idle)
     var transport by mutableStateOf(Transport.None)
 
@@ -43,8 +43,11 @@ class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Bool
 
     /** Stream description (Connected) or the reason of the last failure (Retrying). */
     var detail by mutableStateOf("")
-    /** Optional manual address; empty means use the Mac found on the network. */
-    var hostText by mutableStateOf(initialHost)
+    /**
+     * Developer override: a `host[:port]` passed in the launch intent (for `adb reverse`), never
+     * saved. Empty means use the Mac found on the network.
+     */
+    var hostText by mutableStateOf("")
 
     /** Code this tablet shows; the user types it into the Mac to pair. */
     var pairingCode by mutableStateOf(initialCode)
@@ -55,7 +58,6 @@ class UiState(initialHost: String, initialCode: String, val startOnWifiTab: Bool
 }
 
 class Actions(
-    val connect: () -> Unit,
     val connectUsb: () -> Unit,
     val disconnect: () -> Unit,
     val openFullscreen: () -> Unit,

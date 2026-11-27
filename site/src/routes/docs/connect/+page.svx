@@ -24,7 +24,7 @@ The Mac manages the connection. **Stop sharing** disconnects the tablet and refu
 
 ## Developer mode (adb)
 
-For development only. Start the host with `--adb`: it sets up `adb reverse` tunnels, and you connect the app to `127.0.0.1:7878`. This needs USB debugging and replaces the USB accessory transport, because the two fight over the device.
+For development only. Start the host with `--adb`: it sets up `adb reverse` tunnels, and you start the app with `adb shell am start -n app.ligarview.client/.MainActivity --es host 127.0.0.1:7878`. This needs USB debugging and replaces the USB accessory transport, because the two fight over the device.
 
 ```bash
 host/target/release/ligarview-host --adb

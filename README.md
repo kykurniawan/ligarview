@@ -77,8 +77,8 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
      cable in; the host notices the tablet, switches it into USB accessory mode and Android asks once
      whether to open Ligarview for the accessory (tick "use by default" to skip the question next time).
      Measured on a Tab S9 over USB 2.0: 0.25 ms round trip, 215 Mbit/s.
-   - **Wi-Fi**: the Mac announces itself over Bonjour. Open the app, enter the six-digit pairing code from the Ligarview window once, and the tablet connects by itself whenever the Mac is sharing (same network, 5 GHz recommended; ports 7878 and 7879 must be reachable). The Mac starts and stops the connection with **Stop sharing / Start sharing**; **New code** unpairs every tablet. If the Mac is not found, enter `<mac-ip>:7878` under Address.
-   - **Developer mode**: `ligarview-host --adb` sets up `adb reverse` tunnels (needs USB debugging); connect to `127.0.0.1:7878`. This replaces the USB accessory transport, the two fight over the device.
+   - **Wi-Fi**: the Mac announces itself over Bonjour. Open the app, enter the six-digit pairing code from the Ligarview window once, and the tablet connects by itself whenever the Mac is sharing (same network, 5 GHz recommended; ports 7878 and 7879 must be reachable). The Mac starts and stops the connection with **Stop sharing / Start sharing**; **New code** unpairs every tablet. The Mac must be set to **Connection: Wi-Fi**; in USB mode it does not listen on the network.
+   - **Developer mode**: `ligarview-host --adb` sets up `adb reverse` tunnels (needs USB debugging); then start the app with `adb shell am start -n app.ligarview.client/.MainActivity --es host 127.0.0.1:7878`. This replaces the USB accessory transport, the two fight over the device.
 
    Flags: `--no-usb`, `--no-tcp`, `--adb`.
 
@@ -87,7 +87,7 @@ notarized by Apple), so macOS asks you to confirm the first launch; see the
    it; the app follows the tablet's rotation, the full screen keeps the Mac's proportions (a portrait display
    fills an upright tablet exactly), and the information screen switches to one column.
 
-The app reconnects automatically and remembers the last address. Back returns to the connect screen.
+The app reconnects automatically. Back returns to the connect screen.
 Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
 
 Debugging without a tablet: `python3 tools/dump_stream.py 127.0.0.1 7878 5 out.h264` records the video, `python3 tools/dump_cursor.py` prints cursor messages.

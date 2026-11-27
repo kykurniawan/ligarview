@@ -195,6 +195,10 @@ fn main() -> Result<()> {
         a.fps = c.fps;
         a.bitrate = c.bitrate;
         a.codec = if c.hevc { CodecArg::Hevc } else { CodecArg::H264 };
+        // Only the chosen transport runs: Wi-Fi listens on the network and pairs by code, USB
+        // needs neither (and the host then does not listen on the network at all).
+        a.no_tcp = !c.wifi;
+        a.no_usb = c.wifi;
     }
     if a.portrait {
         std::mem::swap(&mut a.width, &mut a.height);
