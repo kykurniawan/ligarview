@@ -6,18 +6,19 @@
 
 use crate::config::Config;
 use objc2::rc::Retained;
-use objc2::runtime::NSObject;
+use objc2::runtime::{NSObject, ProtocolObject};
 use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSEventMask, NSImage, NSMenu, NSMenuItem,
+    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSEvent, NSEventMask, NSImage, NSMenu, NSMenuItem,
     NSStatusBar, NSStatusItem, NSControlStateValueOff, NSControlStateValueOn,
 };
-use objc2_foundation::{NSData, NSDate, NSDefaultRunLoopMode, NSSize, NSString};
+use objc2_foundation::{NSData, NSObjectProtocol, NSDate, NSDefaultRunLoopMode, NSSize, NSString};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
+static REOPEN: AtomicBool = AtomicBool::new(false);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static ACTIONS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
@@ -58,6 +59,25 @@ define_class!(
     }
 );
 
+define_class!(
+    /// Opening Ligarview.app again while it runs pops the menu up at the pointer, for menu bars
+    /// too crowded to show the status item (the notch hides whatever does not fit).
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "LigarviewAppDelegate"]
+    struct Delegate;
+
+    unsafe impl NSObjectProtocol for Delegate {}
+
+    unsafe impl NSApplicationDelegate for Delegate {
+        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
+        fn reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
+            REOPEN.store(true, Ordering::Relaxed);
+            true
+        }
+    }
+);
+
 impl Handler {
     fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = mtm.alloc::<Self>().set_ivars(());
@@ -69,6 +89,8 @@ struct Menubar {
     mtm: MainThreadMarker,
     _item: Retained<NSStatusItem>,
     _handler: Retained<Handler>,
+    _delegate: Retained<Delegate>,
+    menu: Retained<NSMenu>,
     status: Retained<NSMenuItem>,
     permission: Retained<NSMenuItem>,
     login: Retained<NSMenuItem>,
@@ -136,9 +158,16 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str) {
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     app.finishLaunching();
 
+    let delegate: Retained<Delegate> = {
+        let this = mtm.alloc::<Delegate>().set_ivars(());
+        unsafe { msg_send![super(this), init] }
+    };
+    app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     let handler = Handler::new(mtm);
     let bar = NSStatusBar::systemStatusBar();
     let status_item = bar.statusItemWithLength(-1.0); // NSVariableStatusItemLength
+    status_item.setAutosaveName(Some(&title("LigarviewStatusItem")));
+    status_item.setVisible(true);
     if let Some(button) = status_item.button(mtm) {
         let data = NSData::with_bytes(include_bytes!("../assets/menubar.png"));
         if let Some(img) = NSImage::initWithData(mtm.alloc(), &data) {
@@ -193,6 +222,8 @@ pub fn init(config: &Config, resolution: (u32, u32), codec: &str) {
             mtm,
             _item: status_item,
             _handler: handler,
+            _delegate: delegate,
+            menu,
             status,
             permission,
             login,
@@ -247,6 +278,13 @@ pub fn tick(status: Status) {
             mb.permission.setHidden(access);
         }
         mb.refresh_checks();
+        if REOPEN.swap(false, Ordering::Relaxed) {
+            let app = NSApplication::sharedApplication(mb.mtm);
+            #[allow(deprecated)]
+            app.activateIgnoringOtherApps(true);
+            let at = NSEvent::mouseLocation();
+            mb.menu.popUpMenuPositioningItem_atLocation_inView(None, at, None);
+        }
     });
 }
 
