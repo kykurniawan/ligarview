@@ -1,0 +1,13 @@
+{
+  "name": "Ligarview",
+  "short_name": "Ligarview",
+  "description": "Use an Android tablet as a second Mac display.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

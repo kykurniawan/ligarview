@@ -1,15 +1,40 @@
 <script>
   import '../app.css';
   import { page } from '$app/state';
+  import Seo from '$lib/Seo.svelte';
+  import { SITE, NAME, REPO } from '$lib/seo.js';
   let { children } = $props();
+
+  const siteSchema = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: NAME,
+      url: SITE + '/',
+      inLanguage: 'en'
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: NAME,
+      description:
+        'Use an Android tablet as an extended second display for your Mac over USB or Wi-Fi. Open source.',
+      applicationCategory: 'UtilitiesApplication',
+      operatingSystem: 'macOS 14 or later (Apple Silicon), Android 11 or later',
+      url: SITE + '/',
+      downloadUrl: SITE + '/download',
+      image: SITE + '/og.png',
+      license: 'https://www.apache.org/licenses/LICENSE-2.0',
+      codeRepository: REPO,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      author: { '@type': 'Person', name: 'Rizky Kurniawan' }
+    }
+  ];
   const onDocs = $derived(page.url.pathname.startsWith('/docs'));
   const onDownload = $derived(page.url.pathname.startsWith('/download'));
 </script>
 
-<svelte:head>
-  <title>Ligarview: use an Android tablet as a second Mac display</title>
-  <meta name="description" content="Ligarview turns an Android tablet into a real extended display for your Mac over USB or Wi-Fi. Open source, built in Rust and Kotlin." />
-</svelte:head>
+<Seo path={page.url.pathname} jsonLd={page.url.pathname === '/' ? siteSchema : undefined} />
 
 <header>
   <div class="bar">

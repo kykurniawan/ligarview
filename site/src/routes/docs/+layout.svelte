@@ -14,8 +14,6 @@
   const i = $derived(nav.findIndex(([, href]) => href === here));
 </script>
 
-<svelte:head><title>Docs · Ligarview</title></svelte:head>
-
 <div class="shell">
   <nav class="side" aria-label="Documentation">
     {#each nav as [label, href]}

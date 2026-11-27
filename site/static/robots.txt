@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ligarview.rizkykurniawan.id/sitemap.xml

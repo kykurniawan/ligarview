@@ -28,11 +28,6 @@
   );
 </script>
 
-<svelte:head>
-  <title>Download Ligarview</title>
-  <meta name="description" content="Download Ligarview for macOS (Apple Silicon) and Android. Free and open source." />
-</svelte:head>
-
 <main>
   <section class="hero">
     <p class="kicker">Free and open source</p>

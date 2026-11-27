@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="0.78" cy="0.55" r="0.6">
+      <stop offset="0" stop-color="#1250d3" stop-opacity="0.55" />
+      <stop offset="1" stop-color="#1250d3" stop-opacity="0" />
+    </radialGradient>
+    <clipPath id="mac"><rect x="660" y="128" width="472" height="304" rx="12" /></clipPath>
+    <clipPath id="tab"><rect x="910" y="310" width="250" height="156" rx="10" /></clipPath>
+  </defs>
+  <rect width="1200" height="630" fill="#0b0d10" />
+  <rect width="1200" height="630" fill="url(#glow)" />
+
+  <image x="72" y="64" width="64" height="64" xlink:href="icon-192.png" />
+  <text x="152" y="108" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#e8ebf0">Ligarview</text>
+
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="700" font-size="54" fill="#e8ebf0" letter-spacing="-1.2">
+    <text x="72" y="268">Your Android</text>
+    <text x="72" y="334">tablet, as a second</text>
+    <text x="72" y="400">Mac display.</text>
+  </g>
+  <text x="72" y="486" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26" fill="#98a1ae">Open source · USB or Wi-Fi</text>
+  <text x="72" y="566" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="24" fill="#6e9bff">ligarview.rizkykurniawan.id</text>
+
+  <!-- Mac screen -->
+  <rect x="652" y="120" width="488" height="320" rx="16" fill="#050608" stroke="#2a2f36" stroke-width="2" />
+  <image x="660" y="128" width="472" height="304" preserveAspectRatio="xMidYMid slice" clip-path="url(#mac)" xlink:href="desktop.jpg" />
+  <!-- Tablet -->
+  <rect x="900" y="300" width="270" height="176" rx="18" fill="#050608" stroke="#2a2f36" stroke-width="2" />
+  <image x="910" y="310" width="250" height="156" preserveAspectRatio="xMidYMid slice" clip-path="url(#tab)" xlink:href="info-screen.png" />
+</svg>
