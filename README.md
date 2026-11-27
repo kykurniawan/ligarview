@@ -63,6 +63,11 @@ Early work in progress.
 
    Flags: `--no-usb`, `--no-tcp`, `--adb`.
 
+   **Portrait display** (for reading code with the tablet held upright): run the host with `--portrait`
+   (or `--width 800 --height 1280`). The shape of the display is decided by the Mac, the tablet only shows
+   it; the app follows the tablet's rotation, the full screen keeps the Mac's proportions (a portrait display
+   fills an upright tablet exactly), and the information screen switches to one column.
+
 The app reconnects automatically and remembers the last address. Back returns to the connect screen.
 Long-press the picture to show a statistics overlay (fps, bitrate, decoder latency).
 

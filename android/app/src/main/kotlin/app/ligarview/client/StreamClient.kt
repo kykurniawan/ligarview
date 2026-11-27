@@ -21,6 +21,7 @@ class StreamClient(
     private val source: StreamSource,
     private val surface: Surface,
     private val onStatus: (status: LinkStatus, detail: String) -> Unit,
+    private val onSize: (width: Int, height: Int) -> Unit = { _, _ -> },
 ) {
     @Volatile
     private var running = false
@@ -97,6 +98,7 @@ class StreamClient(
             val height = input.readUnsignedShort()
             val fps = input.readUnsignedShort()
 
+            onSize(width, height)
             if (fps > 0) {
                 if (android.os.Build.VERSION.SDK_INT >= 31) {
                     surface.setFrameRate(fps.toFloat(), Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ALWAYS)

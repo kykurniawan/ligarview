@@ -33,6 +33,9 @@ struct Args {
     /// Logical height in points
     #[arg(long, default_value_t = 800)]
     height: u32,
+    /// Make the display upright (swaps width and height), e.g. for reading code on a tablet held vertically
+    #[arg(long)]
+    portrait: bool,
     /// Pixel density: 2 = HiDPI (Retina-like), 1 = one pixel per point
     #[arg(long, default_value_t = 2)]
     scale: u32,
@@ -169,7 +172,10 @@ fn start_capture(
 }
 
 fn main() -> Result<()> {
-    let a = Args::parse();
+    let mut a = Args::parse();
+    if a.portrait {
+        std::mem::swap(&mut a.width, &mut a.height);
+    }
     if a.cursor_test {
         std::fs::create_dir_all("out/cursors")?;
         for (name, shape) in cursor::standard_shapes() {

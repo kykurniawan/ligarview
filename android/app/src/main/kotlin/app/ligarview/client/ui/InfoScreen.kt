@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -70,7 +71,9 @@ fun InfoOverlay(state: UiState, actions: Actions, versionName: String) {
 @Composable
 private fun InfoScreen(state: UiState, actions: Actions, versionName: String) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        if (maxWidth >= 840.dp) {
+        // Two columns need room on both axes; a tablet held upright gets one column.
+        val twoColumns = maxWidth >= 840.dp && maxWidth > maxHeight
+        if (twoColumns) {
             // Centered vertically; scrolls only when the content is taller than the screen.
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -85,12 +88,19 @@ private fun InfoScreen(state: UiState, actions: Actions, versionName: String) {
                 }
             }
         } else {
+            val padding = if (maxWidth >= 600.dp) 40.dp else 24.dp
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(32.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                LeftColumn(state, actions)
-                RightColumn(state, actions, versionName)
+                // One readable column, centered, however wide the tablet is.
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(padding)) {
+                    LeftColumn(state, actions)
+                    Spacer(Modifier.height(40.dp))
+                    RightColumn(state, actions, versionName)
+                    // Room for the system's gesture handle and bars at the bottom of an upright tablet.
+                    Spacer(Modifier.height(72.dp))
+                }
             }
         }
     }
@@ -201,14 +211,20 @@ private fun Status(state: UiState, actions: Actions) {
  * The preview box is transparent while streaming: the video view sits behind it and the activity
  * keeps it exactly on these bounds. Tapping it opens the full screen.
  */
+private val PORTRAIT_PREVIEW_HEIGHT = 440.dp
+
 @Composable
 private fun Preview(state: UiState, actions: Actions) {
     val live = state.phase == LinkPhase.Streaming
     Column {
+        // A wide picture fills the column; an upright one is kept to a sensible height.
+        val shape = if (state.streamAspect >= 1f) {
+            Modifier.fillMaxWidth().aspectRatio(state.streamAspect)
+        } else {
+            Modifier.height(PORTRAIT_PREVIEW_HEIGHT).aspectRatio(state.streamAspect)
+        }
         Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.6f)
+            shape
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (live) Color.Transparent else Palette.Surface)
                 .onGloballyPositioned { coordinates ->

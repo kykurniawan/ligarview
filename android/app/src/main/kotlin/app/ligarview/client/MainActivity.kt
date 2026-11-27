@@ -272,6 +272,12 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
             setStatsVisible(stats.visibility != View.VISIBLE)
             true
         }
+        // Rotating the tablet changes the root size: refit the full-screen picture (the preview is
+        // re-placed by the Compose screen, which reports its new bounds).
+        root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val changed = right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop
+            if (changed && state.fullscreen && surfaceAnimator == null) placeSurface(fitRect(), 0f)
+        }
         setContentView(root)
     }
 
@@ -348,13 +354,38 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
     }
 
+    /**
+     * The picture at full size: as large as fits while keeping the Mac's proportions. Landscape
+     * tablets of the same shape are filled; an upright tablet gets bars above and below.
+     */
+    private fun fitRect(): RectF {
+        val w = root.width.toFloat()
+        val h = root.height.toFloat()
+        val aspect = state.streamAspect
+        return if (w / h > aspect) {
+            val fitted = h * aspect
+            RectF((w - fitted) / 2f, 0f, (w + fitted) / 2f, h)
+        } else {
+            val fitted = w / aspect
+            RectF(0f, (h - fitted) / 2f, w, (h + fitted) / 2f)
+        }
+    }
+
+    private fun onVideoSize(width: Int, height: Int) {
+        runOnUiThread {
+            if (width <= 0 || height <= 0) return@runOnUiThread
+            state.streamAspect = width.toFloat() / height
+            if (state.fullscreen && surfaceAnimator == null) placeSurface(fitRect(), 0f)
+        }
+    }
+
     /** Full screen picture, or the small preview on the information screen. */
     private fun setFullscreen(value: Boolean) {
         if (state.fullscreen == value) return
         state.fullscreen = value
         backCallback.isEnabled = value
         if (value) {
-            animateSurfaceTo(RectF(0f, 0f, root.width.toFloat(), root.height.toFloat()), 0f)
+            animateSurfaceTo(fitRect(), 0f)
         } else {
             setStatsVisible(false)
             animateSurfaceTo(previewRect, dp(PREVIEW_RADIUS_DP).toFloat())
@@ -442,9 +473,12 @@ class MainActivity : ComponentActivity(), SurfaceHolder.Callback {
         state.phase = LinkPhase.Connecting
         val token = Any()
         clientToken = token
-        client = StreamClient(videoSource, surfaceView.holder.surface) { status, detail ->
-            onLinkStatus(token, status, detail)
-        }.also { it.start() }
+        client = StreamClient(
+            videoSource,
+            surfaceView.holder.surface,
+            onStatus = { status, detail -> onLinkStatus(token, status, detail) },
+            onSize = ::onVideoSize,
+        ).also { it.start() }
         cursorClient = CursorClient(cursorSource, cursorOverlay).also { it.start() }
         cursorOverlay.enabled = true
     }

@@ -32,6 +32,9 @@ class UiState(initialHost: String, val startOnWifiTab: Boolean) {
     /** True while the picture fills the screen; otherwise it is the small preview on the information screen. */
     var fullscreen by mutableStateOf(false)
 
+    /** Width / height of the Mac picture; the preview and the full screen keep this shape. */
+    var streamAspect by mutableStateOf(1.6f)
+
     /** Resolution, frame rate and codec of the stream, once connected. */
     var streamInfo by mutableStateOf("")
 
