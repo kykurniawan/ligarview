@@ -72,6 +72,7 @@ define_class!(
     unsafe impl NSApplicationDelegate for Delegate {
         #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
         fn reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
+            println!("menubar: reopen requested");
             REOPEN.store(true, Ordering::Relaxed);
             true
         }
