@@ -10,7 +10,7 @@ export const PAGES = [
     path: '/',
     title: 'Ligarview: use an Android tablet as a second Mac display',
     description:
-      'Ligarview turns an Android tablet into a real extended display for your Mac over USB or Wi-Fi. Open source, built in Rust and Kotlin, no USB debugging needed.'
+      'Ligarview turns an Android tablet into a real extended display for your Mac over USB or Wi-Fi, with S Pen, touch and keyboard control. Open source, no USB debugging needed.'
   },
   {
     path: '/download',
@@ -22,7 +22,7 @@ export const PAGES = [
     path: '/docs',
     title: 'Ligarview documentation',
     description:
-      'Documentation for Ligarview: use an Android tablet as an extended second display for your Mac. Install, connect, settings, troubleshooting and how it works.'
+      'Documentation for Ligarview: use an Android tablet as an extended second display for your Mac. Install, connect, pen and touch input, settings, troubleshooting and how it works.'
   },
   {
     path: '/docs/install',
@@ -40,25 +40,31 @@ export const PAGES = [
     path: '/docs/host-app',
     title: 'The Ligarview Mac app: settings, sharing and pairing',
     description:
-      'What the Ligarview Mac window does: start and stop sharing, pair or unpair a tablet, and choose orientation, frame rate, quality, codec and start at login.'
+      'What the Ligarview Mac window does: choose USB or Wi-Fi, extend or mirror the display, pair a tablet, allow pen, finger and typing control, and set quality and codec.'
   },
   {
     path: '/docs/android-app',
     title: 'The Ligarview Android app',
     description:
-      'A tour of the Ligarview Android app: link status, a live preview of the Mac screen, full screen mode, connection steps and tablet recommendations.'
+      'A tour of the Ligarview Android app: link status, a live preview of the Mac screen, full screen with a sidebar, connection steps and tablet recommendations.'
+  },
+  {
+    path: '/docs/input',
+    title: 'Control your Mac from the tablet: S Pen, touch and keyboard',
+    description:
+      'Use the S Pen to point and click, your fingers to scroll and zoom, and the tablet keyboard to type on the Mac. Off by default, with a sidebar for modifier keys, Dock and menu bar.'
   },
   {
     path: '/docs/troubleshooting',
     title: 'Troubleshooting Ligarview',
     description:
-      'Fixes for a tablet that will not connect over USB or Wi-Fi, repeated Screen Recording prompts, a blurry picture, lag and a missing cursor.'
+      'Fixes for a tablet that will not connect over USB or Wi-Fi, pen or keyboard input that does nothing, repeated permission prompts, a blurry picture, lag and a missing cursor.'
   },
   {
     path: '/docs/how-it-works',
     title: 'How Ligarview works',
     description:
-      'How Ligarview builds a virtual display on macOS, captures and encodes it in hardware, and streams it to Android over USB accessory mode or TCP with a low-latency cursor.'
+      'How Ligarview builds a virtual display on macOS (or mirrors the main one), streams it to Android over USB accessory mode or TCP, and turns pen, touch and keyboard input back into Mac events.'
   }
 ];
 

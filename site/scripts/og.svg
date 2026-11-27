@@ -24,6 +24,8 @@
   <!-- Mac screen -->
   <rect x="652" y="120" width="488" height="320" rx="16" fill="#050608" stroke="#2a2f36" stroke-width="2" />
   <image x="660" y="128" width="472" height="304" preserveAspectRatio="xMidYMid slice" clip-path="url(#mac)" xlink:href="desktop.jpg" />
+  <!-- The real Ligarview window on the Mac -->
+  <image x="686" y="150" width="120" height="166" xlink:href="mac-window.png" />
   <!-- Tablet -->
   <rect x="900" y="300" width="270" height="176" rx="18" fill="#050608" stroke="#2a2f36" stroke-width="2" />
   <image x="910" y="310" width="250" height="156" preserveAspectRatio="xMidYMid slice" clip-path="url(#tab)" xlink:href="info-screen.png" />

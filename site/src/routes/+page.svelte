@@ -3,10 +3,12 @@
   import MacMockup from '$lib/MacMockup.svelte';
   import TabletMockup from '$lib/TabletMockup.svelte';
   const features = [
-    ['A real extended display', 'Not a mirror. macOS recognizes a second monitor that you can arrange, drag windows onto and run at HiDPI, just like a Retina screen.'],
+    ['A real extended display', 'Not just a mirror. macOS recognizes a second monitor that you can arrange, drag windows onto and run at HiDPI, just like a Retina screen. Prefer to see your main display? One setting mirrors it instead.'],
     ['USB without USB debugging', 'Connect the cable and accept a single prompt on the tablet. No developer mode and no adb. Wi-Fi pairs once with a code and then reconnects by itself.'],
     ['Built for low latency', 'Hardware H.264 or HEVC encoding and decoding. The cursor is rendered on the tablet itself, so it never waits for the video.'],
-    ['Nothing extra', 'No touch input, no audio and no account. The tablet is a monitor, and it does that one job well.']
+    ['Pen, touch and keyboard', 'Point and click with the S Pen, scroll and zoom with your fingers, and type with the on-screen keyboard. All of it is off until you switch it on in the Mac window.'],
+    ['A sidebar, like Sidecar’s', 'Modifier keys you tap to hold, Esc, Undo and Redo, a Dock and menu bar button, the keyboard and a Disconnect button, one tap away on the tablet.'],
+    ['Nothing extra', 'No audio and no account. Ligarview does one job: it puts your Mac on the tablet and lets you reach back.']
   ];
   const numbers = [
     ['0.25 ms', 'USB round trip'],
@@ -15,9 +17,9 @@
     ['215 Mbit/s', 'over plain USB 2.0']
   ];
   const steps = [
-    ['Launch the Mac app', 'Ligarview creates the extra display and waits for the tablet.'],
+    ['Launch the Mac app', 'Ligarview creates the extra display, or takes your main one, and waits for the tablet.'],
     ['Connect the tablet', 'The Mac switches it into accessory mode and Android offers to open the app.'],
-    ['Start working', 'Drag a window across. Tap the preview for full screen and press Back to return.']
+    ['Start working', 'Drag a window across. Tap the preview for full screen, open the sidebar, and press Back to return.']
   ];
 </script>
 
@@ -25,7 +27,7 @@
   <section class="hero">
     <p class="kicker">Open source · macOS + Android</p>
     <h1>Your Android tablet, as a second Mac display.</h1>
-    <p class="lead">Ligarview brings Sidecar-style extended displays to Android. Connect a tablet over USB or Wi-Fi and use it as a genuine second monitor, powered by a Rust host and a native Kotlin app.</p>
+    <p class="lead">Ligarview brings Sidecar-style extended displays to Android. Connect a tablet over USB or Wi-Fi, use it as a genuine second monitor, and reach back into the Mac with the S Pen, your fingers and a keyboard. A Rust host and a native Kotlin app.</p>
     <div class="cta">
       <a class="primary" href="/download">Download</a>
       <a class="secondary" href="https://github.com/kykurniawan/ligarview">View on GitHub</a>
@@ -50,12 +52,12 @@
 
   <section class="block">
     <div class="center"><h2>Two small apps</h2>
-    <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way.</p></div>
+    <p class="sub">A settings window on the Mac and an information screen on the tablet. Both stay out of your way. The screenshots on this page are the real apps.</p></div>
     <div class="show">
       <MacMockup />
       <div class="copy">
         <h3>The Mac app</h3>
-        <p>The Mac is in charge of the connection. A single small window shows the state, starts and stops sharing, and pairs a tablet with the code it shows. Choose orientation, frame rate, quality and codec, start it at login, and close the window: the host keeps running.</p>
+        <p>The Mac is in charge of the connection. A single small window shows the state and starts and stops sharing. Choose USB or Wi-Fi, an extended or a mirrored display, decide what the tablet may control, and set quality and codec. Close the window and the host keeps running.</p>
       </div>
     </div>
     <div class="show flip">
@@ -63,6 +65,13 @@
       <div class="copy">
         <h3>The Android app</h3>
         <p>Connection steps with a live cable indicator, a preview of the Mac screen you can open full screen, and recommendations read from the tablet itself: refresh rate, power saving and background limits.</p>
+      </div>
+    </div>
+    <div class="show">
+      <TabletMockup src="/tablet-fullscreen.jpg" alt="The Ligarview Android app in full screen, with the sidebar open beside the Mac screen" />
+      <div class="copy">
+        <h3>Reach back into the Mac</h3>
+        <p>In full screen, open the sidebar for modifier keys, Esc, Undo, the Dock and the keyboard. The S Pen points and clicks, fingers scroll with momentum and zoom, and the tablet's keyboard types. Each of these is a switch in the Mac window that you turn on yourself. <a href="/docs/input">Read how it works →</a></p>
       </div>
     </div>
   </section>

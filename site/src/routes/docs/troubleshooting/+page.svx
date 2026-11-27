@@ -12,6 +12,25 @@
 - Both devices must be on the same network. Routers with client isolation, guest networks and some mesh systems block the Bonjour discovery the pairing relies on.
 - If the tablet shows "refused", the code is wrong or sharing is off on the Mac. Press **Unpair** and pair again with the code currently on the tablet.
 
+## The pen, fingers or keyboard do nothing
+
+- Turn on the matching "Allow … from the tablet" checkbox in the Ligarview window. They are off by default, and a sidebar button that the Mac does not allow is dimmed.
+- Allow **Ligarview** in **System Settings → Privacy & Security → Accessibility**. Without it nothing reaches the Mac, and the window says so. If it is not in the list, turn a checkbox off and on again so macOS asks.
+- Input only works while the picture is full screen.
+- After rebuilding the app from source, macOS may need the permission again; use `tools/bundle.sh` so the signature keeps its identifier.
+
+## Zoom does nothing, or scrolling zooms
+
+Pinching sends Ctrl and scroll, which Chromium-based browsers, Figma, Excalidraw and many map apps read as zoom. Safari and Preview only understand the trackpad's own pinch and ignore it. If scrolling ever zooms, a Ctrl is stuck: leave full screen and come back, or turn the pen checkbox off and on.
+
+## A modifier key seems stuck
+
+Tap its sidebar button again to let go. Leaving full screen, switching the pen checkbox off and unplugging the cable also release everything the tablet was holding.
+
+## The Dock button does nothing
+
+It pushes the pointer against the bottom edge of the tablet's display, which brings up an auto-hidden Dock. Turn on **Automatically hide and show the Dock** in System Settings, and make sure the Dock is at the bottom of the screen.
+
 ## macOS keeps asking for Screen Recording
 
 Remove the old **Ligarview** entry in **Privacy & Security → Screen & System Audio Recording**, add it again, and reopen the app. If you build from source, use `tools/bundle.sh`: it signs the app with a requirement tied to its identifier so the permission survives rebuilds.

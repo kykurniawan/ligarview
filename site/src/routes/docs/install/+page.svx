@@ -17,6 +17,7 @@ The builds are not signed with an Apple Developer ID and are not notarized, and 
    ```
 
 3. Allow **Screen Recording** when asked, in **System Settings → Privacy & Security → Screen & System Audio Recording**, then open the app again.
+4. Only if you want the tablet to control the Mac: turn on one of the "Allow … from the tablet" checkboxes in the Ligarview window and allow **Ligarview** in **System Settings → Privacy & Security → Accessibility**. See [Pen, touch and keyboard](/docs/input).
 
 ## The Android app
 
